@@ -1,0 +1,20 @@
+# Configuration for this repository's fixture suite. Applications write their own.
+version = "1"
+php-version = "8.3"
+
+[source]
+paths = ["tests/fixtures"]
+includes = [
+    "vendor/symfony/config",
+    "vendor/symfony/dependency-injection",
+    "vendor/psr/container",
+]
+
+[analyzer]
+find-unused-definitions = false
+find-unused-expressions = false
+check-property-initialization = false
+
+[extension-hosts.symfony]
+command = ["php", "tests/worker.php"]
+workers = 1

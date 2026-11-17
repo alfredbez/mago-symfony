@@ -1,0 +1,305 @@
+<?php
+
+declare(strict_types=1);
+
+chdir(dirname(__DIR__));
+
+$failures = 0;
+
+$version = trim(run([PHP_BINARY, 'vendor/bin/mago', '--version'])['stdout']);
+fwrite(STDOUT, $version . "\n\n");
+
+$validated = run([PHP_BINARY, 'vendor/bin/mago', 'extension', 'validate']);
+fwrite(STDOUT, "extension validate (exit {$validated['exit']}):\n");
+fwrite(STDOUT, trim($validated['stdout'] . $validated['stderr']) . "\n\n");
+if ($validated['exit'] !== 0) {
+    fwrite(STDERR, "extension validate failed\n");
+    exit(1);
+}
+
+$with = analyze(false);
+$without = analyze(true);
+
+fwrite(STDOUT, "with extension (" . count($with) . " issues):\n");
+printIssues($with);
+fwrite(STDOUT, "\n--no-extensions (" . count($without) . " issues):\n");
+printIssues($without);
+fwrite(STDOUT, "\n");
+
+// The extension must resolve the fluent Config chains and container lookups,
+// and keep the real errors.
+$expected = [
+    false => [
+        'tests/fixtures/Configuration.php' => [],
+        'tests/fixtures/ConfigurationNegative.php' => [
+            'alfredbez/symfony/invalid-root-node-method' => 2,
+            'method-access-on-null' => 1,
+            'non-existent-method' => 3,
+        ],
+        'tests/fixtures/ContainerUsage.php' => [],
+        // unknown service id stays mixed, unknown method on a service still reports,
+        // nullable invalidBehavior flags preserve possible-method-access-on-null
+        'tests/fixtures/ContainerNegative.php' => [
+            'mixed-method-access' => 1,
+            'non-existent-method' => 1,
+            'possible-method-access-on-null' => 4,
+        ],
+    ],
+    true => [
+        // TreeBuilder::getRootNode() returns NodeDefinition|ArrayNodeDefinition,
+        // and NodeParentInterface is empty, so the chain has no methods to call.
+        'tests/fixtures/Configuration.php' => [
+            'less-specific-return-statement' => 1,
+            'mixed-method-access' => 2,
+            'non-existent-method' => 27,
+            'nullable-return-statement' => 1,
+            'possible-method-access-on-null' => 10,
+        ],
+        'tests/fixtures/ConfigurationNegative.php' => [
+            'non-existent-method' => 21,
+            'possible-method-access-on-null' => 6,
+        ],
+        // ContainerInterface::get() is mixed or ?object without the extension.
+        'tests/fixtures/ContainerUsage.php' => [
+            'ambiguous-object-method-access' => 6,
+            'mixed-assignment' => 2,
+            'mixed-method-access' => 5,
+            'mixed-return-statement' => 1,
+            'possible-method-access-on-null' => 2,
+        ],
+        'tests/fixtures/ContainerNegative.php' => [
+            'ambiguous-object-method-access' => 4,
+            'mixed-method-access' => 2,
+            'possible-method-access-on-null' => 4,
+        ],
+    ],
+];
+
+foreach ([false => 'with extension', true => '--no-extensions'] as $disabled => $label) {
+    $failures += assertHistograms($label, $disabled ? $without : $with, $expected[$disabled]);
+}
+
+$failures += assertMessageCount(
+    'with extension',
+    $with,
+    'tests/fixtures/ContainerNegative.php',
+    'non-existent-method',
+    'missingMethod',
+    1,
+);
+$failures += assertMessageCount(
+    'with extension',
+    $with,
+    'tests/fixtures/Configuration.php',
+    'non-existent-method',
+    'end',
+    0,
+);
+$failures += assertMessageCount(
+    'with extension',
+    $with,
+    'tests/fixtures/ConfigurationNegative.php',
+    'alfredbez/symfony/invalid-root-node-method',
+    'ScalarNodeDefinition',
+    2,
+);
+$failures += assertMessageCount(
+    'with extension',
+    $with,
+    'tests/fixtures/ConfigurationNegative.php',
+    'non-existent-method',
+    'TreeBuilder',
+    1,
+);
+$failures += assertMessageCount(
+    'with extension',
+    $with,
+    'tests/fixtures/ConfigurationNegative.php',
+    'non-existent-method',
+    'ScalarNodeDefinition',
+    1,
+);
+$failures += assertMessageCount(
+    'with extension',
+    $with,
+    'tests/fixtures/ConfigurationNegative.php',
+    'non-existent-method',
+    'missingOnArrayNode',
+    1,
+);
+
+if ($failures > 0) {
+    fwrite(STDERR, "\n{$failures} assertion(s) failed\n");
+    exit(1);
+}
+
+fwrite(STDOUT, "PASS\n");
+exit(0);
+
+/**
+ * @param list<string> $command
+ * @return array{exit: int, stdout: string, stderr: string}
+ */
+function run(array $command): array
+{
+    $process = proc_open($command, [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes);
+    if ($process === false) {
+        fwrite(STDERR, 'failed to start ' . implode(' ', $command) . "\n");
+        exit(1);
+    }
+
+    $stdout = stream_get_contents($pipes[1]);
+    $stderr = stream_get_contents($pipes[2]);
+    fclose($pipes[1]);
+    fclose($pipes[2]);
+
+    return [
+        'exit' => proc_close($process),
+        'stdout' => $stdout === false ? '' : $stdout,
+        'stderr' => $stderr === false ? '' : $stderr,
+    ];
+}
+
+/** @return list<array{level: string, code: string, file: string, line: int, message: string}> */
+function analyze(bool $noExtensions): array
+{
+    $command = [PHP_BINARY, 'vendor/bin/mago', 'analyze', '--reporting-format=json'];
+    if ($noExtensions) {
+        $command[] = '--no-extensions';
+    }
+
+    $result = run($command);
+    if (trim($result['stderr']) !== '') {
+        fwrite(STDERR, ($noExtensions ? '--no-extensions' : 'with extension') . " stderr:\n" . $result['stderr'] . "\n");
+    }
+
+    try {
+        $decoded = json_decode($result['stdout'], true, 512, JSON_THROW_ON_ERROR);
+    } catch (Throwable $exception) {
+        fwrite(STDERR, "mago analyze did not return JSON (exit {$result['exit']}): {$exception->getMessage()}\n");
+        fwrite(STDERR, $result['stdout'] . "\n");
+        exit(1);
+    }
+
+    if (!is_array($decoded) || !isset($decoded['issues']) || !is_array($decoded['issues'])) {
+        fwrite(STDERR, "mago analyze JSON has no issues array\n");
+        exit(1);
+    }
+
+    $issues = [];
+    foreach ($decoded['issues'] as $issue) {
+        $primary = $issue['annotations'][0];
+        foreach ($issue['annotations'] as $annotation) {
+            if (($annotation['kind'] ?? '') === 'Primary') {
+                $primary = $annotation;
+                break;
+            }
+        }
+
+        $issues[] = [
+            'level' => (string) $issue['level'],
+            'code' => (string) $issue['code'],
+            'file' => (string) $primary['span']['file_id']['name'],
+            'line' => (int) $primary['span']['start']['line'],
+            'message' => (string) $issue['message'],
+        ];
+    }
+
+    return $issues;
+}
+
+/** @param list<array{level: string, code: string, file: string, line: int, message: string}> $issues */
+function printIssues(array $issues): void
+{
+    if ($issues === []) {
+        fwrite(STDOUT, "  (none)\n");
+
+        return;
+    }
+
+    foreach ($issues as $issue) {
+        fwrite(STDOUT, sprintf(
+            "  %s\t%s\t%s:%d\t%s\n",
+            $issue['level'],
+            $issue['code'],
+            $issue['file'],
+            $issue['line'],
+            $issue['message'],
+        ));
+    }
+}
+
+/**
+ * @param list<array{level: string, code: string, file: string, line: int, message: string}> $issues
+ * @param array<string, array<string, int>> $expected
+ */
+function assertHistograms(string $label, array $issues, array $expected): int
+{
+    $actual = [];
+    foreach ($issues as $issue) {
+        $actual[$issue['file']][$issue['code']] = ($actual[$issue['file']][$issue['code']] ?? 0) + 1;
+    }
+
+    $failures = 0;
+    $files = array_unique([...array_keys($expected), ...array_keys($actual)]);
+    sort($files);
+    foreach ($files as $file) {
+        $expectedCounts = array_filter(
+            $expected[$file] ?? [],
+            static fn (int $count): bool => $count !== 0,
+        );
+        $actualCounts = $actual[$file] ?? [];
+        ksort($expectedCounts);
+        ksort($actualCounts);
+        if ($expectedCounts === $actualCounts) {
+            fwrite(STDOUT, "ok  {$label}  {$file}  " . formatCounts($actualCounts) . "\n");
+            continue;
+        }
+
+        $failures++;
+        fwrite(STDERR, "FAIL {$label}  {$file}\n");
+        fwrite(STDERR, '  expected ' . formatCounts($expectedCounts) . "\n");
+        fwrite(STDERR, '  actual   ' . formatCounts($actualCounts) . "\n");
+    }
+
+    return $failures;
+}
+
+/**
+ * @param list<array{level: string, code: string, file: string, line: int, message: string}> $issues
+ */
+function assertMessageCount(string $label, array $issues, string $file, string $code, string $needle, int $expected): int
+{
+    $actual = 0;
+    foreach ($issues as $issue) {
+        if ($issue['file'] === $file && $issue['code'] === $code && str_contains($issue['message'], $needle)) {
+            $actual++;
+        }
+    }
+
+    if ($actual === $expected) {
+        fwrite(STDOUT, "ok  {$label}  {$file}  {$code} containing \"{$needle}\" = {$actual}\n");
+
+        return 0;
+    }
+
+    fwrite(STDERR, "FAIL {$label}  {$file}  {$code} containing \"{$needle}\"\n");
+    fwrite(STDERR, "  expected {$expected}, actual {$actual}\n");
+
+    return 1;
+}
+
+/** @param array<string, int> $counts */
+function formatCounts(array $counts): string
+{
+    if ($counts === []) {
+        return '(none)';
+    }
+
+    $parts = [];
+    foreach ($counts as $code => $count) {
+        $parts[] = "{$code}={$count}";
+    }
+
+    return implode(', ', $parts);
+}
