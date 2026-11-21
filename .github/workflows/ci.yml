@@ -26,6 +26,7 @@ jobs:
       - name: Install Symfony 6.4 dependencies
         if: matrix.symfony == '6.4'
         run: |
+          composer config policy.advisories.block false
           composer require --dev --no-interaction --prefer-dist --no-progress --with-all-dependencies \
             "symfony/config:^6.4" \
             "symfony/console:^6.4" \
@@ -36,7 +37,9 @@ jobs:
             "symfony/http-foundation:^6.4" \
             "symfony/messenger:^6.4" \
             "symfony/routing:^6.4" \
-            "symfony/security-core:^6.4"
+            "symfony/security-bundle:^6.4" \
+            "symfony/security-core:^6.4" \
+            "symfony/serializer:^6.4"
       - name: Validate conformance catalog
         run: php tests/check-spec.php
       - name: Run runtime and analyzer tests
