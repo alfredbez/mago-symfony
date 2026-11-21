@@ -15,7 +15,7 @@ Symfony support for [Mago](https://github.com/carthage-software/mago) 1.60.2 thr
 
 - PHP `~8.1.0 || ~8.2.0 || ~8.3.0 || ~8.4.0 || ~8.5.0 || ~8.6.0`
 - Mago (`carthage-software/mago`) `~1.60.2`
-- Symfony `^6.4 || ^7.0` (CI tests PHP 8.3 and 8.4 against both Symfony 6.4 and 7.0)
+- Symfony `^6.4 || ^7.0` (CI tests PHP 8.3 and 8.4 against Symfony 6.4 and the locked Symfony 7.4 suite)
 
 ## Installation and worker setup
 
@@ -66,7 +66,7 @@ vendor/bin/mago analyze
 - Without a compiled container XML or JSON map, class-name service ids are a typing convention rather than proof of container registration. `has()` retains its native `bool` return type.
 - Return-type providers cannot inspect `TreeBuilder` constructor AST syntax in Mago 1.60.2. `RootNodeReturnTypeProvider` infers `ArrayNodeDefinition`, and `TreeBuilderRootNodeHook` separately reports invalid calls on local literal non-array roots (isolated to the enclosing function scope, without branch or by-reference capture tracking).
 - On Symfony 6.4/7.2 (before Symfony's `@template TParent = null`), an untracked `NodeBuilder` stays nullable (`ArrayNodeDefinition|null`) and an untracked `NodeDefinition` parameter delegates to Symfony's declared `end()` return type.
-- On Symfony 7.4, passing a custom (non-built-in) type name to `ArrayNodeDefinition::prototype()` triggers Symfony's own `@template T` constraint on `prototype()`; overriding built-in types via `setNodeClass('scalar', ...)` works on both Symfony 6.4 and 7.x.
+- On Symfony 7.4, passing a custom (non-built-in) type name to `ArrayNodeDefinition::prototype()` triggers Symfony's own `@template T` constraint on `prototype()`; overriding built-in types via `setNodeClass('scalar', ...)` works on both Symfony 6.4 and 7.x. Fluent `setNodeClass()` mappings propagate downward into nested `children()` and prototypes, not backward across `end()` to a pre-existing root variable.
 - `ConsoleCommandArgumentsHook` checks static `addArgument()` / `addOption()` declarations in `configure()` and skips commands that call `parent::configure()` or `setDefinition()`.
 
 ## Tests, corpus checks, and benchmarks

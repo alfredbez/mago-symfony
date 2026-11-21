@@ -186,26 +186,51 @@ final class ConfigEndReturnTypeProvider implements MethodReturnTypeProvider
     private function resolveChildren(ReturnTypeProviderContext $context, ?Type $receiver): Type
     {
         if ($receiver !== null) {
-            $parent = $this->extractParent($receiver);
-            if ($parent !== null) {
-                $parentObject = $parent->atomicTypes[0] ?? null;
-                if (
-                    $parentObject instanceof NamedObjectType
-                    && $parentObject->name !== self::TREE_BUILDER
-                    && !isset(self::BUILTIN_NODE_DEFINITIONS[$parentObject->name])
-                    && $this->isNodeBuilderClass($context, $parentObject->name)
-                ) {
-                    $mappings = $parentObject->parameters[1] ?? null;
-                    if ($mappings !== null) {
-                        return Type::namedObject($parentObject->name, $receiver, $mappings);
-                    }
-
-                    return $this->withParent($parentObject->name, $receiver);
+            $parentBuilder = $this->findEnclosingNodeBuilder($context, $receiver);
+            if ($parentBuilder !== null) {
+                $mappings = $parentBuilder->parameters[1] ?? null;
+                if ($mappings !== null) {
+                    return Type::namedObject($parentBuilder->name, $receiver, $mappings);
                 }
+
+                return $this->withParent($parentBuilder->name, $receiver);
             }
         }
 
         return $this->withParent(self::NODE_BUILDER, $receiver);
+    }
+
+    private function findEnclosingNodeBuilder(ReturnTypeProviderContext $context, ?Type $node): ?NamedObjectType
+    {
+        $current = $node;
+        for ($depth = 0; $depth < 8; ++$depth) {
+            $parent = $this->extractParent($current);
+            if ($parent === null) {
+                return null;
+            }
+
+            $parentObject = $parent->atomicTypes[0] ?? null;
+            if (!$parentObject instanceof NamedObjectType) {
+                return null;
+            }
+
+            if ($parentObject->name === self::TREE_BUILDER) {
+                return null;
+            }
+
+            if (isset(self::BUILTIN_NODE_DEFINITIONS[$parentObject->name])) {
+                $current = $parent;
+                continue;
+            }
+
+            if ($this->isNodeBuilderClass($context, $parentObject->name)) {
+                return $parentObject;
+            }
+
+            return null;
+        }
+
+        return null;
     }
 
     private function resolveSetNodeClass(ReturnTypeProviderContext $context, ?Type $receiver): ?Type
@@ -215,24 +240,35 @@ final class ConfigEndReturnTypeProvider implements MethodReturnTypeProvider
             return null;
         }
 
+        $parentParam = $builderObject->parameters[0] ?? $this->nullableArrayNodeType();
         $typeArg = $context->invocation->getArgument(0, 'type')?->type?->getLiteralString();
+        if ($typeArg === null) {
+            // Dynamic node type name may override any previously tracked mapping.
+            return isset($builderObject->parameters[1])
+                ? Type::namedObject($builderObject->name, $parentParam)
+                : $receiver;
+        }
+
+        $key = strtolower($typeArg);
+        $mappings = $this->extractNodeMappings($receiver);
         $classType = $context->invocation->getArgument(1, 'class')?->type;
         $classArg = $classType?->getLiteralClassString() ?? $classType?->getLiteralString();
+        $nodeClass = $classArg !== null ? ltrim($classArg, '\\') : '';
 
-        if ($typeArg === null || $classArg === null) {
-            return $receiver;
-        }
-
-        $nodeClass = ltrim($classArg, '\\');
         if ($nodeClass === '' || !$context->codebase->classExists($nodeClass)) {
-            return $receiver;
+            if (!isset($mappings[$key])) {
+                return $receiver;
+            }
+
+            unset($mappings[$key]);
+
+            return $mappings === []
+                ? Type::namedObject($builderObject->name, $parentParam)
+                : Type::namedObject($builderObject->name, $parentParam, self::encodeNodeMappings($mappings));
         }
 
-        $mappings = $this->extractNodeMappings($receiver);
-        $mappings[strtolower($typeArg)] = $nodeClass;
+        $mappings[$key] = $nodeClass;
         $this->hasCustomNodeMappings = true;
-
-        $parentParam = $builderObject->parameters[0] ?? $this->nullableArrayNodeType();
 
         return Type::namedObject($builderObject->name, $parentParam, self::encodeNodeMappings($mappings));
     }
@@ -266,7 +302,10 @@ final class ConfigEndReturnTypeProvider implements MethodReturnTypeProvider
 
         $nodeClass = null;
         if ($this->hasCustomNodeMappings) {
-            $nodeClass = $this->extractNodeMapping($this->extractParent($receiver), strtolower($typeArg));
+            $builder = $this->findEnclosingNodeBuilder($context, $receiver);
+            if ($builder !== null) {
+                $nodeClass = $this->extractNodeMappingFromObject($builder, strtolower($typeArg));
+            }
         }
         $nodeClass ??= self::NODE_TYPE_MAP[$typeArg] ?? self::NODE_TYPE_MAP[strtolower($typeArg)] ?? null;
         if ($nodeClass === null || !$context->codebase->classExists($nodeClass)) {
@@ -282,9 +321,14 @@ final class ConfigEndReturnTypeProvider implements MethodReturnTypeProvider
         string $defaultNodeClass,
         ?Type $receiver,
     ): ?Type {
-        $nodeClass = $this->hasCustomNodeMappings
-            ? ($this->extractNodeMapping($this->extractParent($receiver), $nodeType) ?? $defaultNodeClass)
-            : $defaultNodeClass;
+        $nodeClass = null;
+        if ($this->hasCustomNodeMappings) {
+            $builder = $this->findEnclosingNodeBuilder($context, $receiver);
+            if ($builder !== null) {
+                $nodeClass = $this->extractNodeMappingFromObject($builder, $nodeType);
+            }
+        }
+        $nodeClass ??= $defaultNodeClass;
         if (!$context->codebase->classExists($nodeClass)) {
             return null;
         }
@@ -472,21 +516,33 @@ final class ConfigEndReturnTypeProvider implements MethodReturnTypeProvider
         }
 
         foreach ($type->atomicTypes as $atomic) {
-            if (!$atomic instanceof NamedObjectType || $atomic->parameters === null || !isset($atomic->parameters[1])) {
+            if ($atomic instanceof NamedObjectType) {
+                $mapped = $this->extractNodeMappingFromObject($atomic, $nodeType);
+                if ($mapped !== null) {
+                    return $mapped;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private function extractNodeMappingFromObject(NamedObjectType $atomic, string $nodeType): ?string
+    {
+        if ($atomic->parameters === null || !isset($atomic->parameters[1])) {
+            return null;
+        }
+
+        foreach ($atomic->parameters[1]->atomicTypes as $mapAtomic) {
+            if (!$mapAtomic instanceof KeyedArrayType || $mapAtomic->knownItems === null) {
                 continue;
             }
 
-            foreach ($atomic->parameters[1]->atomicTypes as $mapAtomic) {
-                if (!$mapAtomic instanceof KeyedArrayType || $mapAtomic->knownItems === null) {
-                    continue;
-                }
-
-                foreach ($mapAtomic->knownItems as $item) {
-                    if ($item->key->kind === ArrayKeyKind::String && $item->key->value === $nodeType) {
-                        $className = $item->type->getLiteralString();
-                        if ($className !== null) {
-                            return $className;
-                        }
+            foreach ($mapAtomic->knownItems as $item) {
+                if ($item->key->kind === ArrayKeyKind::String && $item->key->value === $nodeType) {
+                    $className = $item->type->getLiteralString();
+                    if ($className !== null) {
+                        return $className;
                     }
                 }
             }

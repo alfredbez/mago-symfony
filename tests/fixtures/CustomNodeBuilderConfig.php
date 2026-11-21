@@ -74,6 +74,15 @@ final class CustomNodeBuilderConfig
                         ->customScalarSetting()
                     ->end()
                 ->end()
+                ->arrayNode('deepPrototypeItems')
+                    ->arrayPrototype()
+                        ->children()
+                            ->node('deep', 'custom')
+                                ->customSetting()
+                            ->end()
+                        ->end()
+                    ->end()
+                ->end()
             ->end();
     }
 

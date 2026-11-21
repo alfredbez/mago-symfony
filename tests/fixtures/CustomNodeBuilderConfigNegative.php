@@ -40,6 +40,19 @@ final class CustomNodeBuilderConfigNegative
             ->missingOnRootArray();
     }
 
+    /** @param class-string<\Symfony\Component\Config\Definition\Builder\ScalarNodeDefinition> $dynamicScalarClass */
+    public function dynamicOverrideInvalidatesPreviousMapping(string $dynamicScalarClass): void
+    {
+        $root = new ArrayNodeDefinition('root');
+
+        $root
+            ->children()
+                ->setNodeClass('scalar', CustomScalarNodeDefinition::class)
+                ->setNodeClass('scalar', $dynamicScalarClass)
+                ->scalarNode('s')
+                    ->customScalarSetting();
+    }
+
     public function unparentedSetNodeClassStaysNullable(): void
     {
         (new NodeBuilder())

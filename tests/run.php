@@ -75,10 +75,10 @@ $expected = [
         'tests/fixtures/CustomNodeBuilderConfigNegative.php' => $isSymfony7
             ? [
                 'method-access-on-null' => 1,
-                'non-existent-method' => 4,
+                'non-existent-method' => 5,
             ]
             : [
-                'non-existent-method' => 4,
+                'non-existent-method' => 5,
                 'possible-method-access-on-null' => 1,
             ],
         'tests/fixtures/ContainerUsage.php' => [],
@@ -155,22 +155,22 @@ $expected = [
             ],
         'tests/fixtures/CustomNodeBuilderConfig.php' => $isSymfony7
             ? [
-                'mixed-method-access' => 22,
+                'mixed-method-access' => 31,
                 'mixed-return-statement' => 2,
                 'non-existent-method' => 9,
             ]
             : [
-                'mixed-method-access' => 22,
+                'mixed-method-access' => 31,
                 'mixed-return-statement' => 2,
                 'non-existent-method' => 10,
                 'possible-method-access-on-null' => 2,
             ],
         'tests/fixtures/CustomNodeBuilderConfigNegative.php' => $isSymfony7
             ? [
-                'non-existent-method' => 11,
+                'non-existent-method' => 12,
             ]
             : [
-                'non-existent-method' => 14,
+                'non-existent-method' => 15,
                 'possible-method-access-on-null' => 3,
             ],
         'tests/fixtures/ContainerFlags.php' => [
