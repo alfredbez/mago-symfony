@@ -6,6 +6,14 @@ chdir(dirname(__DIR__));
 
 require __DIR__ . '/../vendor/autoload.php';
 $isSymfony7 = class_exists(\Symfony\Component\Config\Definition\Builder\StringNodeDefinition::class);
+$serializerHasTemplates = str_contains(
+    (string) (new ReflectionMethod(\Symfony\Component\Serializer\SerializerInterface::class, 'deserialize'))->getDocComment(),
+    '@template',
+);
+$denormalizerHasTemplates = str_contains(
+    (string) (new ReflectionMethod(\Symfony\Component\Serializer\Normalizer\DenormalizerInterface::class, 'denormalize'))->getDocComment(),
+    '@template',
+);
 
 putenv('MAGO_SYMFONY_CONTAINER_MAP=' . __DIR__ . '/container-map.json');
 
@@ -529,9 +537,9 @@ $xmlExpected = [
             'invalid-return-statement' => 1,
             'missing-constructor' => $isSymfony7 ? 2 : 1,
             'mixed-array-index' => 1,
-            'mixed-assignment' => 10,
+            'mixed-assignment' => 10 - ($serializerHasTemplates ? 1 : 0) - ($denormalizerHasTemplates ? 1 : 0),
             'mixed-operand' => 2,
-            'mixed-property-access' => 4,
+            'mixed-property-access' => 4 - ($serializerHasTemplates ? 1 : 0) - ($denormalizerHasTemplates ? 1 : 0),
             'non-existent-method' => 4,
             'nullable-return-statement' => 1,
         ],
@@ -546,9 +554,9 @@ $xmlExpected = [
             'invalid-iterator' => 1,
             'invalid-return-statement' => 1,
             'missing-constructor' => 1,
-            'mixed-assignment' => 3,
-            'mixed-method-access' => 2,
-            'non-existent-method' => 1,
+            'mixed-assignment' => 3 - ($serializerHasTemplates ? 1 : 0),
+            'mixed-method-access' => 2 - ($serializerHasTemplates ? 1 : 0),
+            'non-existent-method' => 1 + ($serializerHasTemplates ? 1 : 0),
             'nullable-return-statement' => 1,
         ],
     ],

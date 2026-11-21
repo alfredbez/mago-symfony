@@ -131,4 +131,46 @@ $refMethod = new ReflectionMethod(\Symfony\Bundle\FrameworkBundle\Controller\Abs
 $requiredAttrs = $refMethod->getAttributes(\Symfony\Contracts\Service\Attribute\Required::class);
 check($requiredAttrs !== [], 'AbstractController::setContainer carries #[Required] attribute');
 
+require_once __DIR__ . '/fixtures-xml/SymfonyComponents.php';
+$serializer = new \Symfony\Component\Serializer\Serializer(
+    [
+        new \Symfony\Component\Serializer\Normalizer\ArrayDenormalizer(),
+        new \Symfony\Component\Serializer\Normalizer\ObjectNormalizer(),
+    ],
+    [new \Symfony\Component\Serializer\Encoder\JsonEncoder()],
+);
+$deserializedEvent = $serializer->deserialize('{"name":"wave5"}', \SymfonyFixtureXml\DomainEvent::class, 'json');
+check($deserializedEvent instanceof \SymfonyFixtureXml\DomainEvent && $deserializedEvent->name === 'wave5', 'Serializer::deserialize hydrates DomainEvent');
+
+$deserializedList = $serializer->deserialize('[{"name":"a"},{"name":"b"}]', \SymfonyFixtureXml\DomainEvent::class . '[]', 'json');
+check(
+    is_array($deserializedList)
+    && count($deserializedList) === 2
+    && $deserializedList[0] instanceof \SymfonyFixtureXml\DomainEvent
+    && $deserializedList[1] instanceof \SymfonyFixtureXml\DomainEvent
+    && $deserializedList[1]->name === 'b',
+    'Serializer::deserialize hydrates DomainEvent[] list',
+);
+
+$deserializedMap = $serializer->deserialize('{"primary":{"name":"mapped"}}', \SymfonyFixtureXml\DomainEvent::class . '[]', 'json');
+check(
+    is_array($deserializedMap)
+    && isset($deserializedMap['primary'])
+    && $deserializedMap['primary'] instanceof \SymfonyFixtureXml\DomainEvent
+    && $deserializedMap['primary']->name === 'mapped',
+    'Serializer::deserialize preserves string keys for DomainEvent[]',
+);
+
+$denormalizedMatrix = $serializer->denormalize(
+    ['primary' => ['first' => ['name' => 'nested']]],
+    \SymfonyFixtureXml\DomainEvent::class . '[][]',
+);
+check(
+    is_array($denormalizedMatrix)
+    && isset($denormalizedMatrix['primary']['first'])
+    && $denormalizedMatrix['primary']['first'] instanceof \SymfonyFixtureXml\DomainEvent
+    && $denormalizedMatrix['primary']['first']->name === 'nested',
+    'Denormalizer::denormalize hydrates nested DomainEvent[][] preserving associative keys',
+);
+
 fwrite(STDOUT, "Symfony runtime contracts PASS\n\n");
