@@ -524,6 +524,12 @@ $xmlExpected = [
         'tests/fixtures-xml/Wave6ValidatorInitializerNegative.php' => [
             'missing-constructor' => 2,
         ],
+        'tests/fixtures-xml/Wave6Contracts.php' => [],
+        'tests/fixtures-xml/Wave6ContractsNegative.php' => [
+            'non-existent-method' => 2,
+            'possibly-null-operand' => 6,
+            'possibly-null-property-access' => 2,
+        ],
     ],
     true => [
         'tests/fixtures-xml/ContainerXmlUsage.php' => [
@@ -600,6 +606,32 @@ $xmlExpected = [
         'tests/fixtures-xml/Wave6ValidatorInitializerNegative.php' => [
             'missing-constructor' => 2,
         ],
+        'tests/fixtures-xml/Wave6Contracts.php' => $isSymfony7
+            ? [
+                'possibly-null-operand' => 3,
+            ]
+            : [
+                'ambiguous-object-method-access' => 2,
+                'less-specific-nested-argument-type' => 1,
+                'mixed-assignment' => 2,
+                'mixed-operand' => 4,
+                'mixed-return-statement' => 1,
+                'non-existent-method' => 2,
+                'possibly-null-operand' => 6,
+                'possibly-null-property-access' => 3,
+            ],
+        'tests/fixtures-xml/Wave6ContractsNegative.php' => $isSymfony7
+            ? [
+                'non-existent-method' => 2,
+                'possibly-null-operand' => 6,
+                'possibly-null-property-access' => 2,
+            ]
+            : [
+                'ambiguous-object-method-access' => 1,
+                'non-existent-method' => 1,
+                'possibly-null-operand' => 6,
+                'possibly-null-property-access' => 2,
+            ],
         'vendor/symfony/validator/ConstraintValidator.php' => $isSymfony7
             ? [
                 'uninitialized-property' => 1,
@@ -620,6 +652,8 @@ $failures += assertMessageCount('xml with extension', $xmlWith, 'tests/fixtures-
 $failures += assertMessageCount('xml with extension', $xmlWith, 'tests/fixtures-xml/Wave4ContractsNegative.php', 'missing-constructor', 'UninitializedServiceNegative', 1);
 $failures += assertMessageCount('xml with extension', $xmlWith, 'tests/fixtures-xml/ContainerXmlNegative.php', 'alfredbez/symfony/private-service-access', 'xml.private.greeter', 1);
 $failures += assertMessageCount('xml with extension', $xmlWith, 'tests/fixtures-xml/ContainerXmlNegative.php', 'alfredbez/symfony/private-service-access', 'xml.alias.chain', 1);
+$failures += assertMessageCount('xml with extension', $xmlWith, 'tests/fixtures-xml/Wave6ContractsNegative.php', 'non-existent-method', 'Wave6MarkerAttribute', 1);
+$failures += assertMessageCount('xml with extension', $xmlWith, 'tests/fixtures-xml/Wave6ContractsNegative.php', 'non-existent-method', 'Wave6DomainException', 1);
 
 putenv('MAGO_SYMFONY_STRICT_CONTAINER_SERVICES=1');
 $xmlStrictWith = analyze(false, 'tests/mago-xml.toml');

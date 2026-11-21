@@ -256,4 +256,54 @@ $arrayInput->setInteractive(false);
 $inputHelper->setInput($arrayInput);
 check($inputHelper->isInteractiveInput() === false, 'InputAwareHelper::setInput wires InputInterface before use');
 
+require_once __DIR__ . '/fixtures-xml/Wave6Contracts.php';
+$langReq = new \Symfony\Component\HttpFoundation\Request();
+check($langReq->getPreferredLanguage(['en', 'de']) === 'en', 'Request::getPreferredLanguage returns first locale string for non-empty list');
+check($langReq->getPreferredLanguage([]) === null, 'Request::getPreferredLanguage returns null for empty list without Accept-Language');
+check(@$langReq->getPreferredLanguage(['a' => 'en', 'b' => 'de']) === null, 'Request::getPreferredLanguage returns null for associative non-0-indexed array');
+
+$enumBag = new \Symfony\Component\HttpFoundation\ParameterBag();
+check($enumBag->getEnum('status', \SymfonyFixtureXml\Wave6Status::class, \SymfonyFixtureXml\Wave6Status::Draft) === \SymfonyFixtureXml\Wave6Status::Draft, 'ParameterBag::getEnum returns non-null default when missing');
+$enumBag->set('status', 'published');
+check($enumBag->getEnum('status', \SymfonyFixtureXml\Wave6Status::class, \SymfonyFixtureXml\Wave6Status::Draft) === \SymfonyFixtureXml\Wave6Status::Published, 'ParameterBag::getEnum hydrates backed enum when present');
+$enumInput = new \Symfony\Component\HttpFoundation\InputBag();
+check($enumInput->getEnum('status', \SymfonyFixtureXml\Wave6Status::class, \SymfonyFixtureXml\Wave6Status::Published) === \SymfonyFixtureXml\Wave6Status::Published, 'InputBag::getEnum returns non-null default when missing');
+
+$attrController = new class {
+    #[\SymfonyFixtureXml\Wave6MarkerAttribute('alpha')]
+    public function handle(): void {}
+};
+$dummyKernel = new class implements \Symfony\Component\HttpKernel\HttpKernelInterface {
+    public function handle(\Symfony\Component\HttpFoundation\Request $request, int $type = self::MAIN_REQUEST, bool $catch = true): \Symfony\Component\HttpFoundation\Response
+    {
+        return new \Symfony\Component\HttpFoundation\Response();
+    }
+};
+$ctrlEvent = new \Symfony\Component\HttpKernel\Event\ControllerEvent(
+    $dummyKernel,
+    [$attrController, 'handle'],
+    new \Symfony\Component\HttpFoundation\Request(),
+    \Symfony\Component\HttpKernel\HttpKernelInterface::MAIN_REQUEST,
+);
+$attrs = $ctrlEvent->getAttributes(\SymfonyFixtureXml\Wave6MarkerAttribute::class);
+check(array_is_list($attrs) && count($attrs) === 1 && $attrs[0] instanceof \SymfonyFixtureXml\Wave6MarkerAttribute && $attrs[0]->describe() === 'alpha', 'ControllerEvent::getAttributes returns list<T> for concrete attribute class');
+$ctrlArgsEvent = new \Symfony\Component\HttpKernel\Event\ControllerArgumentsEvent(
+    $dummyKernel,
+    $ctrlEvent,
+    [],
+    new \Symfony\Component\HttpFoundation\Request(),
+    \Symfony\Component\HttpKernel\HttpKernelInterface::MAIN_REQUEST,
+);
+$argAttrs = $ctrlArgsEvent->getAttributes(\SymfonyFixtureXml\Wave6MarkerAttribute::class);
+check(array_is_list($argAttrs) && count($argAttrs) === 1 && $argAttrs[0] instanceof \SymfonyFixtureXml\Wave6MarkerAttribute, 'ControllerArgumentsEvent::getAttributes returns list<T> for concrete attribute class');
+
+$domainEx = new \SymfonyFixtureXml\Wave6DomainException('boom');
+$otherEx = new \LogicException('other');
+$failedEx = new \Symfony\Component\Messenger\Exception\HandlerFailedException(
+    new \Symfony\Component\Messenger\Envelope(new \stdClass()),
+    ['handler.a' => $domainEx, 'handler.b' => $otherEx],
+);
+$filteredEx = $failedEx->getWrappedExceptions(\SymfonyFixtureXml\Wave6DomainException::class);
+check(count($filteredEx) === 1 && isset($filteredEx['handler.a']) && $filteredEx['handler.a'] === $domainEx, 'HandlerFailedException::getWrappedExceptions preserves string handler keys and filters by class');
+
 fwrite(STDOUT, "Symfony runtime contracts PASS\n\n");
