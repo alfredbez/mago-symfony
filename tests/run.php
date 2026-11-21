@@ -38,6 +38,8 @@ fwrite(STDOUT, "\n");
 // and keep the real errors.
 $expected = [
     false => [
+        'tests/fixtures/TreeBuilderScopes.php' => [],
+        'tests/fixtures/TreeBuilderScopesNegative.php' => ['alfredbez/symfony/invalid-root-node-method' => 2],
         'tests/fixtures/ConfigNodes.php' => [],
         'tests/fixtures/ConfigNodesNegative.php' => ['non-existent-method' => 8, 'possible-method-access-on-null' => 2],
         'tests/fixtures/Configuration.php' => [],
@@ -66,6 +68,8 @@ $expected = [
         ],
     ],
     true => [
+        'tests/fixtures/TreeBuilderScopes.php' => ['non-existent-method' => 1],
+        'tests/fixtures/TreeBuilderScopesNegative.php' => ['non-existent-method' => 2],
         'tests/fixtures/ConfigNodes.php' => ['mixed-method-access' => 23, 'mixed-return-statement' => 2, 'non-existent-method' => 34, 'possible-method-access-on-null' => 8],
         'tests/fixtures/ConfigNodesNegative.php' => ['non-existent-method' => 16, 'possible-method-access-on-null' => 2],
         // TreeBuilder::getRootNode() returns NodeDefinition|ArrayNodeDefinition,
@@ -167,6 +171,8 @@ $failures += assertMessageCount(
 
 $sites = [
     false => [
+        'tests/fixtures/TreeBuilderScopes.php' => [],
+        'tests/fixtures/TreeBuilderScopesNegative.php' => ['19:alfredbez/symfony/invalid-root-node-method', '31:alfredbez/symfony/invalid-root-node-method'],
         'tests/fixtures/ConfigNodes.php' => [],
         'tests/fixtures/ConfigNodesNegative.php' => ['13:possible-method-access-on-null', '14:possible-method-access-on-null', '20:non-existent-method', '21:non-existent-method', '22:non-existent-method', '23:non-existent-method', '24:non-existent-method', '25:non-existent-method', '26:non-existent-method', '27:non-existent-method'],
         'tests/fixtures/ContainerFlags.php' => [],
@@ -178,6 +184,8 @@ $sites = [
         ],
     ],
     true => [
+        'tests/fixtures/TreeBuilderScopes.php' => ['19:non-existent-method'],
+        'tests/fixtures/TreeBuilderScopesNegative.php' => ['19:non-existent-method', '31:non-existent-method'],
         'tests/fixtures/ConfigNodes.php' => ['14:non-existent-method', '14:non-existent-method', '12:possible-method-access-on-null', '14:non-existent-method', '14:non-existent-method', '15:non-existent-method', '15:non-existent-method', '12:possible-method-access-on-null', '15:non-existent-method', '15:non-existent-method', '16:non-existent-method', '16:non-existent-method', '12:possible-method-access-on-null', '16:non-existent-method', '16:non-existent-method', '17:non-existent-method', '17:non-existent-method', '12:possible-method-access-on-null', '17:non-existent-method', '17:non-existent-method', '18:non-existent-method', '18:non-existent-method', '12:possible-method-access-on-null', '18:non-existent-method', '18:non-existent-method', '19:non-existent-method', '19:non-existent-method', '12:possible-method-access-on-null', '19:non-existent-method', '19:non-existent-method', '19:non-existent-method', '20:mixed-method-access', '20:mixed-method-access', '20:mixed-method-access', '21:mixed-method-access', '21:mixed-method-access', '21:mixed-method-access', '22:mixed-method-access', '12:mixed-return-statement', '29:non-existent-method', '29:non-existent-method', '27:possible-method-access-on-null', '29:non-existent-method', '29:non-existent-method', '30:non-existent-method', '30:non-existent-method', '27:possible-method-access-on-null', '30:non-existent-method', '30:non-existent-method', '30:non-existent-method', '30:mixed-method-access', '31:mixed-method-access', '31:mixed-method-access', '31:mixed-method-access', '32:mixed-method-access', '32:mixed-method-access', '32:mixed-method-access', '33:mixed-method-access', '33:mixed-method-access', '33:mixed-method-access', '34:mixed-method-access', '34:mixed-method-access', '34:mixed-method-access', '34:mixed-method-access', '34:mixed-method-access', '34:mixed-method-access', '27:mixed-return-statement'],
         'tests/fixtures/ConfigNodesNegative.php' => ['14:non-existent-method', '14:non-existent-method', '14:possible-method-access-on-null', '14:non-existent-method', '14:non-existent-method', '20:non-existent-method', '21:non-existent-method', '22:non-existent-method', '23:non-existent-method', '24:non-existent-method', '25:non-existent-method', '26:non-existent-method', '27:non-existent-method', '27:non-existent-method', '27:possible-method-access-on-null', '27:non-existent-method', '27:non-existent-method', '27:non-existent-method'],
         'tests/fixtures/ContainerFlags.php' => ['14:ambiguous-object-method-access', '14:possible-method-access-on-null', '15:ambiguous-object-method-access', '21:ambiguous-object-method-access', '21:possible-method-access-on-null', '22:ambiguous-object-method-access', '22:possible-method-access-on-null', '27:ambiguous-object-method-access', '28:ambiguous-object-method-access', '29:ambiguous-object-method-access', '30:ambiguous-object-method-access'],

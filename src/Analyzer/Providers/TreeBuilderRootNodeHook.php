@@ -148,6 +148,10 @@ final class TreeBuilderRootNodeHook implements MethodCallAnalysisHook
                 break;
             }
 
+            if ($this->enclosingScope($source, $assignment)->id !== $scope->id) {
+                continue;
+            }
+
             $children = $source->getChildren($assignment);
             $lhs = $children[0] ?? null;
             $rhs = $children !== [] ? $children[array_key_last($children)] : null;
@@ -274,7 +278,7 @@ final class TreeBuilderRootNodeHook implements MethodCallAnalysisHook
         string $nodeType,
     ): void {
         foreach ($source->getDescendants($scope) as $node) {
-            if ($node->span->start <= $afterOffset) {
+            if ($node->span->start <= $afterOffset || $this->enclosingScope($source, $node)->id !== $scope->id) {
                 continue;
             }
 

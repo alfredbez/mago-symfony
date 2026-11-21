@@ -52,4 +52,19 @@ $nodes = new \SymfonyFixture\ConfigNodes();
 check($nodes->nodes() instanceof \Symfony\Component\Config\Definition\Builder\ArrayNodeDefinition, 'Every node end returns to its actual parent');
 check($nodes->prototypes() instanceof \Symfony\Component\Config\Definition\Builder\ArrayNodeDefinition, 'Every prototype end returns to its array');
 
+require __DIR__ . '/fixtures/TreeBuilderScopes.php';
+require __DIR__ . '/fixtures/TreeBuilderScopesNegative.php';
+$scopes = new \SymfonyFixture\TreeBuilderScopes();
+$scopes->nestedTreeAssignment();
+$scopes->shadowedRoot();
+$invalidScopes = new \SymfonyFixture\TreeBuilderScopesNegative();
+foreach (['nestedTreeAssignment', 'nestedRootAssignment'] as $method) {
+    try {
+        $invalidScopes->$method();
+        throw new RuntimeException('Scalar roots have no children method');
+    } catch (Error $error) {
+        check(str_contains($error->getMessage(), 'children'), 'Expected the missing children method');
+    }
+}
+
 fwrite(STDOUT, "Symfony runtime contracts PASS\n\n");
