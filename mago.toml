@@ -8,6 +8,7 @@ includes = [
     "vendor/symfony/config",
     "vendor/symfony/dependency-injection",
     "vendor/psr/container",
+    "vendor/symfony/service-contracts",
 ]
 
 [analyzer]

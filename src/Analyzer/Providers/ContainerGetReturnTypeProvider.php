@@ -66,15 +66,11 @@ final class ContainerGetReturnTypeProvider implements MethodReturnTypeProvider
 
     private function resolveServiceClass(string $id, ReturnTypeProviderContext $context): ?string
     {
-        if ($context->codebase->classOrInterfaceExists($id)) {
-            return $id;
-        }
-
         $class = $this->services->classFor($id);
-        if ($class === null || !$context->codebase->classOrInterfaceExists($class)) {
-            return null;
+        if ($class !== null) {
+            return $context->codebase->classOrInterfaceExists($class) ? $class : null;
         }
 
-        return $class;
+        return $context->codebase->classOrInterfaceExists($id) ? $id : null;
     }
 }

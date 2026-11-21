@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 chdir(dirname(__DIR__));
 
+putenv('MAGO_SYMFONY_CONTAINER_MAP=' . __DIR__ . '/container-map.json');
+
 $failures = 0;
 
 $version = trim(run([PHP_BINARY, 'vendor/bin/mago', '--version'])['stdout']);
@@ -14,6 +16,12 @@ fwrite(STDOUT, "extension validate (exit {$validated['exit']}):\n");
 fwrite(STDOUT, trim($validated['stdout'] . $validated['stderr']) . "\n\n");
 if ($validated['exit'] !== 0) {
     fwrite(STDERR, "extension validate failed\n");
+    exit(1);
+}
+
+$runtime = run([PHP_BINARY, 'tests/runtime.php']);
+fwrite(STDOUT, $runtime['stdout'] . $runtime['stderr']);
+if ($runtime['exit'] !== 0) {
     exit(1);
 }
 
@@ -37,6 +45,11 @@ $expected = [
             'non-existent-method' => 3,
         ],
         'tests/fixtures/ContainerUsage.php' => [],
+        'tests/fixtures/ContainerMap.php' => [],
+        'tests/fixtures/ContainerMapNegative.php' => [
+            'mixed-method-access' => 2,
+            'non-existent-method' => 4,
+        ],
         // unknown service id stays mixed, unknown method on a service still reports,
         // nullable invalidBehavior flags preserve possible-method-access-on-null
         'tests/fixtures/ContainerNegative.php' => [
@@ -58,6 +71,13 @@ $expected = [
         'tests/fixtures/ConfigurationNegative.php' => [
             'non-existent-method' => 21,
             'possible-method-access-on-null' => 6,
+        ],
+        'tests/fixtures/ContainerMap.php' => [
+            'mixed-method-access' => 4,
+            'mixed-return-statement' => 1,
+        ],
+        'tests/fixtures/ContainerMapNegative.php' => [
+            'mixed-method-access' => 6,
         ],
         // ContainerInterface::get() is mixed or ?object without the extension.
         'tests/fixtures/ContainerUsage.php' => [
@@ -127,6 +147,29 @@ $failures += assertMessageCount(
     'missingOnArrayNode',
     1,
 );
+
+$sites = [
+    false => [
+        'tests/fixtures/ContainerMap.php' => [],
+        'tests/fixtures/ContainerMapNegative.php' => [
+            '14:non-existent-method', '15:non-existent-method', '20:mixed-method-access',
+            '25:non-existent-method', '26:non-existent-method', '27:mixed-method-access',
+        ],
+    ],
+    true => [
+        'tests/fixtures/ContainerMap.php' => [
+            '14:mixed-method-access', '14:mixed-return-statement', '19:mixed-method-access',
+            '24:mixed-method-access', '25:mixed-method-access',
+        ],
+        'tests/fixtures/ContainerMapNegative.php' => [
+            '14:mixed-method-access', '15:mixed-method-access', '20:mixed-method-access',
+            '25:mixed-method-access', '26:mixed-method-access', '27:mixed-method-access',
+        ],
+    ],
+];
+foreach ([false => $with, true => $without] as $disabled => $issues) {
+    $failures += assertSites($disabled ? '--no-extensions' : 'with extension', $issues, $sites[$disabled]);
+}
 
 if ($failures > 0) {
     fwrite(STDERR, "\n{$failures} assertion(s) failed\n");
@@ -302,4 +345,30 @@ function formatCounts(array $counts): string
     }
 
     return implode(', ', $parts);
+}
+
+/**
+ * @param list<array{level: string, code: string, file: string, line: int, message: string}> $issues
+ * @param array<string, list<string>> $expected
+ */
+function assertSites(string $label, array $issues, array $expected): int
+{
+    $failures = 0;
+    foreach ($expected as $file => $sites) {
+        $actual = [];
+        foreach ($issues as $issue) {
+            if ($issue['file'] === $file) {
+                $actual[] = $issue['line'] . ':' . $issue['code'];
+            }
+        }
+        sort($actual);
+        sort($sites);
+        if ($actual !== $sites) {
+            fwrite(STDERR, "FAIL {$label} {$file} diagnostic sites\n");
+            fwrite(STDERR, '  expected ' . json_encode($sites) . "\n  actual   " . json_encode($actual) . "\n");
+            $failures++;
+        }
+    }
+
+    return $failures;
 }

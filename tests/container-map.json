@@ -1,0 +1,7 @@
+{
+    "shop.greeter": "SymfonyFixture\\Greeter",
+    "shop.mailer": "SymfonyFixture\\Mailer",
+    "SymfonyFixture\\Greeter": "SymfonyFixture\\ConcreteGreeter",
+    "SymfonyFixture\\ConcreteGreeter": "SymfonyFixture\\MissingMappedClass",
+    "42": "SymfonyFixture\\Mailer"
+}

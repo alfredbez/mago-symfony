@@ -44,8 +44,8 @@ final class ServiceClassMap
 
         $classes = [];
         foreach ($decoded as $id => $class) {
-            if (is_string($id) && is_string($class) && $class !== '') {
-                $classes[$id] = $class;
+            if (is_string($class) && $class !== '') {
+                $classes[(string) $id] = $class;
             }
         }
 
