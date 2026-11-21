@@ -209,71 +209,71 @@ function providerWorkloads(): array
             'scale' => 20,
         ],
         'container_class_id' => [
-            'fn' => static fn (): ?Type => $containerProvider->getReturnType($ctxClassId),
+            'fn' => static fn (): ?string => $containerProvider->getReturnType($ctxClassId)?->encode(),
             'scale' => 1,
         ],
         'container_map_id' => [
-            'fn' => static fn (): ?Type => $containerProvider->getReturnType($ctxMapId),
+            'fn' => static fn (): ?string => $containerProvider->getReturnType($ctxMapId)?->encode(),
             'scale' => 1,
         ],
         'container_flag_throw' => [
-            'fn' => static fn (): ?Type => $containerProvider->getReturnType($ctxFlagThrow),
+            'fn' => static fn (): ?string => $containerProvider->getReturnType($ctxFlagThrow)?->encode(),
             'scale' => 1,
         ],
         'container_flag_null' => [
-            'fn' => static fn (): ?Type => $containerProvider->getReturnType($ctxFlagNull),
+            'fn' => static fn (): ?string => $containerProvider->getReturnType($ctxFlagNull)?->encode(),
             'scale' => 1,
         ],
         'container_flag_builder_0' => [
-            'fn' => static fn (): ?Type => $containerProvider->getReturnType($ctxFlagBuilder0),
+            'fn' => static fn (): ?string => $containerProvider->getReturnType($ctxFlagBuilder0)?->encode(),
             'scale' => 1,
         ],
         'container_flag_union' => [
-            'fn' => static fn (): ?Type => $containerProvider->getReturnType($ctxFlagBuilderUnion),
+            'fn' => static fn (): ?string => $containerProvider->getReturnType($ctxFlagBuilderUnion)?->encode(),
             'scale' => 1,
         ],
         'container_unknown' => [
-            'fn' => static fn (): ?Type => $containerProvider->getReturnType($ctxUnknown),
+            'fn' => static fn (): ?string => $containerProvider->getReturnType($ctxUnknown)?->encode(),
             'scale' => 1,
         ],
         'root_node' => [
-            'fn' => static fn (): ?Type => $rootNodeProvider->getReturnType($ctxRootNode),
+            'fn' => static fn (): ?string => $rootNodeProvider->getReturnType($ctxRootNode)?->encode(),
             'scale' => 1,
         ],
         'config_children' => [
-            'fn' => static fn (): ?Type => $configProvider->getReturnType($ctxChildren),
+            'fn' => static fn (): ?string => $configProvider->getReturnType($ctxChildren)?->encode(),
             'scale' => 1,
         ],
         'config_scalar_node' => [
-            'fn' => static fn (): ?Type => $configProvider->getReturnType($ctxScalarNode),
+            'fn' => static fn (): ?string => $configProvider->getReturnType($ctxScalarNode)?->encode(),
             'scale' => 1,
         ],
         'config_node_literal' => [
-            'fn' => static fn (): ?Type => $configProvider->getReturnType($ctxNodeLiteral),
+            'fn' => static fn (): ?string => $configProvider->getReturnType($ctxNodeLiteral)?->encode(),
             'scale' => 1,
         ],
         'config_prototype' => [
-            'fn' => static fn (): ?Type => $configProvider->getReturnType($ctxPrototype),
+            'fn' => static fn (): ?string => $configProvider->getReturnType($ctxPrototype)?->encode(),
             'scale' => 1,
         ],
         'config_proto_shortcut' => [
-            'fn' => static fn (): ?Type => $configProvider->getReturnType($ctxProtoShortcut),
+            'fn' => static fn (): ?string => $configProvider->getReturnType($ctxProtoShortcut)?->encode(),
             'scale' => 1,
         ],
         'config_validate' => [
-            'fn' => static fn (): ?Type => $configProvider->getReturnType($ctxValidate),
+            'fn' => static fn (): ?string => $configProvider->getReturnType($ctxValidate)?->encode(),
             'scale' => 1,
         ],
         'config_end_tracked' => [
-            'fn' => static fn (): ?Type => $configProvider->getReturnType($ctxEndTracked),
+            'fn' => static fn (): ?string => $configProvider->getReturnType($ctxEndTracked)?->encode(),
             'scale' => 1,
         ],
         'config_end_builder' => [
-            'fn' => static fn (): ?Type => $configProvider->getReturnType($ctxEndUntrackedBuilder),
+            'fn' => static fn (): ?string => $configProvider->getReturnType($ctxEndUntrackedBuilder)?->encode(),
             'scale' => 1,
         ],
         'config_end_node' => [
-            'fn' => static fn (): ?Type => $configProvider->getReturnType($ctxEndUntrackedNode),
+            'fn' => static fn (): ?string => $configProvider->getReturnType($ctxEndUntrackedNode)?->encode(),
             'scale' => 1,
         ],
         'config_chain_full' => [
@@ -289,19 +289,29 @@ function providerWorkloads(): array
                 $nodeBuilder,
                 $nodeDefinition,
                 $exprBuilder,
-            ): ?Type {
+            ): ?string {
                 $t1 = $rootNodeProvider->getReturnType($context($invocation('getRootNode', $treeBuilder, $treeType)));
+                $t1?->encode();
                 $t2 = $configProvider->getReturnType($context($invocation('children', $arrayNode, $t1)));
+                $t2?->encode();
                 $t3 = $configProvider->getReturnType($context($invocation('arrayNode', $nodeBuilder, $t2, [$argument(Type::literalString('db'))])));
+                $t3?->encode();
                 $t4 = $configProvider->getReturnType($context($invocation('children', $arrayNode, $t3)));
+                $t4?->encode();
                 $t5 = $configProvider->getReturnType($context($invocation('scalarNode', $nodeBuilder, $t4, [$argument(Type::literalString('dsn'))])));
+                $t5?->encode();
                 $t6 = $configProvider->getReturnType($context($invocation('validate', $nodeDefinition, $t5)));
+                $t6?->encode();
                 $t7 = $configProvider->getReturnType($context($invocation('end', $exprBuilder, $t6)));
+                $t7?->encode();
                 $t8 = $configProvider->getReturnType($context($invocation('end', $nodeDefinition, $t7)));
+                $t8?->encode();
                 $t9 = $configProvider->getReturnType($context($invocation('end', $nodeBuilder, $t8)));
+                $t9?->encode();
                 $t10 = $configProvider->getReturnType($context($invocation('end', $nodeDefinition, $t9)));
+                $t10?->encode();
 
-                return $configProvider->getReturnType($context($invocation('end', $nodeBuilder, $t10)));
+                return $configProvider->getReturnType($context($invocation('end', $nodeBuilder, $t10)))?->encode();
             },
             'scale' => 10,
         ],
