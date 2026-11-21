@@ -6,16 +6,22 @@ namespace SymfonyFixtureXml;
 
 use Psr\Container\ContainerInterface as PsrContainer;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use Symfony\Component\DependencyInjection\Container;
+use Symfony\Component\DependencyInjection\ContainerInterface;
 use Symfony\Component\DependencyInjection\ParameterBag\ParameterBagInterface;
 
 final class ContainerXmlNegative extends AbstractController
 {
-    public function invalidXmlServices(PsrContainer $psr): void
+    public function invalidXmlServices(PsrContainer $psr, ContainerInterface $sf, Container $concrete): void
     {
         $psr->get('xml.factory.class')->send('wrong@example.com');
         $psr->get('xml.factory.service')->implementationOnly();
         $psr->get('xml.alias.chain')->send('wrong@example.com');
         $psr->get('xml.cycle.a')->implementationOnly();
+        $sf->get('xml.private.greeter')->implementationOnly();
+        $concrete->get('xml.alias.chain')->implementationOnly();
+        $sf->get('xml.unknown.service', ContainerInterface::NULL_ON_INVALID_REFERENCE);
+        $sf->get('xml.unknown.service');
     }
 
     public function invalidXmlParameters(ParameterBagInterface $bag): int

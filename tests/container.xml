@@ -46,6 +46,7 @@
     </service>
     <service id="xml.alias.step" alias="xml.private.greeter"/>
     <service id="xml.alias.chain" alias="xml.alias.step"/>
+    <service id="xml.alias.public" alias="xml.alias.step" public="true"/>
     <service id="xml.cycle.a" alias="xml.cycle.b"/>
     <service id="xml.cycle.b" alias="xml.cycle.a"/>
   </services>

@@ -21,19 +21,20 @@ final class ContainerXmlLoader
      *     classes: array<string, string>,
      *     factories: array<string, ServiceFactory>,
      *     parameters: array<string, ParameterDescriptor>,
+     *     visibility: array<string, bool>,
      * }
      */
     public static function loadFile(string $path): array
     {
         if (!is_file($path) || !is_readable($path)) {
-            return ['classes' => [], 'factories' => [], 'parameters' => []];
+            return ['classes' => [], 'factories' => [], 'parameters' => [], 'visibility' => []];
         }
 
         $reader = new XMLReader();
         $previous = libxml_use_internal_errors(true);
         try {
             if (!@$reader->open($path, null, LIBXML_NONET | LIBXML_COMPACT)) {
-                return ['classes' => [], 'factories' => [], 'parameters' => []];
+                return ['classes' => [], 'factories' => [], 'parameters' => [], 'visibility' => []];
             }
 
             return self::parseReader($reader);
@@ -49,19 +50,20 @@ final class ContainerXmlLoader
      *     classes: array<string, string>,
      *     factories: array<string, ServiceFactory>,
      *     parameters: array<string, ParameterDescriptor>,
+     *     visibility: array<string, bool>,
      * }
      */
     public static function loadString(string $xml): array
     {
         if (trim($xml) === '') {
-            return ['classes' => [], 'factories' => [], 'parameters' => []];
+            return ['classes' => [], 'factories' => [], 'parameters' => [], 'visibility' => []];
         }
 
         $reader = new XMLReader();
         $previous = libxml_use_internal_errors(true);
         try {
             if (!@$reader->XML($xml, null, LIBXML_NONET | LIBXML_COMPACT)) {
-                return ['classes' => [], 'factories' => [], 'parameters' => []];
+                return ['classes' => [], 'factories' => [], 'parameters' => [], 'visibility' => []];
             }
 
             return self::parseReader($reader);
@@ -77,6 +79,7 @@ final class ContainerXmlLoader
      *     classes: array<string, string>,
      *     factories: array<string, ServiceFactory>,
      *     parameters: array<string, ParameterDescriptor>,
+     *     visibility: array<string, bool>,
      * }
      */
     private static function parseReader(XMLReader $reader): array
@@ -85,6 +88,8 @@ final class ContainerXmlLoader
         $classes = [];
         /** @var array<string, string> $aliases */
         $aliases = [];
+        /** @var array<string, bool> $visibility */
+        $visibility = [];
         /** @var array<string, array{kind: string, class?: string, service?: string, method?: string, function?: string}> $rawFactories */
         $rawFactories = [];
         /** @var array<string, ParameterDescriptor> $parameters */
@@ -139,6 +144,8 @@ final class ContainerXmlLoader
                 if ($id === null || $id === '') {
                     continue;
                 }
+
+                $visibility[$id] = strtolower((string) $reader->getAttribute('public')) === 'true';
 
                 $alias = $reader->getAttribute('alias');
                 if ($alias !== null && $alias !== '') {
@@ -219,6 +226,7 @@ final class ContainerXmlLoader
             'classes' => $classes,
             'factories' => $factories,
             'parameters' => $parameters,
+            'visibility' => $visibility,
         ];
     }
 

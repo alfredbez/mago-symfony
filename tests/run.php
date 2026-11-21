@@ -495,6 +495,7 @@ $xmlExpected = [
         'tests/fixtures-xml/ContainerXmlUsage.php' => [],
         'tests/fixtures-xml/SymfonyComponents.php' => [],
         'tests/fixtures-xml/ContainerXmlNegative.php' => [
+            'alfredbez/symfony/private-service-access' => 2,
             'invalid-argument' => 2,
             'mixed-method-access' => 1,
             'non-existent-method' => 3,
@@ -515,17 +516,17 @@ $xmlExpected = [
     ],
     true => [
         'tests/fixtures-xml/ContainerXmlUsage.php' => [
-            'ambiguous-object-method-access' => 2,
+            'ambiguous-object-method-access' => 4,
             'invalid-array-access' => 5,
             'less-specific-return-statement' => 1,
             'missing-constructor' => $isSymfony7 ? 1 : 0,
             'mixed-argument' => 4,
             'mixed-array-access' => 2,
             'mixed-assignment' => 1,
-            'mixed-method-access' => 5,
+            'mixed-method-access' => 7,
             'mixed-operand' => 12,
             'mixed-return-statement' => 1,
-            'possible-method-access-on-null' => 1,
+            'possible-method-access-on-null' => 2,
             'possibly-invalid-argument' => 7,
             'possibly-invalid-array-access' => 5,
             'possibly-null-argument' => 6,
@@ -544,8 +545,10 @@ $xmlExpected = [
             'nullable-return-statement' => 1,
         ],
         'tests/fixtures-xml/ContainerXmlNegative.php' => [
+            'ambiguous-object-method-access' => 2,
             'missing-constructor' => $isSymfony7 ? 1 : 0,
             'mixed-method-access' => 4,
+            'possible-method-access-on-null' => 1,
             'possibly-invalid-argument' => 4,
             'possibly-null-argument' => 4,
         ],
@@ -572,6 +575,14 @@ $failures += assertMessageCount('xml with extension', $xmlWith, 'tests/fixtures-
 $failures += assertMessageCount('xml with extension', $xmlWith, 'tests/fixtures-xml/Wave4ContractsNegative.php', 'non-existent-method', 'nonExistentMethodOnDomainEvent', 1);
 $failures += assertMessageCount('xml with extension', $xmlWith, 'tests/fixtures-xml/Wave4ContractsNegative.php', 'non-existent-method', 'anotherMissingMethod', 1);
 $failures += assertMessageCount('xml with extension', $xmlWith, 'tests/fixtures-xml/Wave4ContractsNegative.php', 'missing-constructor', 'UninitializedServiceNegative', 1);
+$failures += assertMessageCount('xml with extension', $xmlWith, 'tests/fixtures-xml/ContainerXmlNegative.php', 'alfredbez/symfony/private-service-access', 'xml.private.greeter', 1);
+$failures += assertMessageCount('xml with extension', $xmlWith, 'tests/fixtures-xml/ContainerXmlNegative.php', 'alfredbez/symfony/private-service-access', 'xml.alias.chain', 1);
+
+putenv('MAGO_SYMFONY_STRICT_CONTAINER_SERVICES=1');
+$xmlStrictWith = analyze(false, 'tests/mago-xml.toml');
+putenv('MAGO_SYMFONY_STRICT_CONTAINER_SERVICES');
+$failures += assertMessageCount('xml strict with extension', $xmlStrictWith, 'tests/fixtures-xml/ContainerXmlNegative.php', 'alfredbez/symfony/unknown-service-id', 'xml.unknown.service', 1);
+$failures += assertMessageCount('xml strict with extension', $xmlStrictWith, 'tests/fixtures-xml/ContainerXmlUsage.php', 'alfredbez/symfony/unknown-service-id', '', 0);
 
 putenv('MAGO_SYMFONY_CONTAINER_XML');
 putenv('MAGO_SYMFONY_USER_CLASS=SymfonyFixtureSecurity\\AppUser');

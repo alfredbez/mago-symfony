@@ -21,6 +21,7 @@ final class ServiceClassMap
 {
     public const XML_ENVIRONMENT_VARIABLE = 'MAGO_SYMFONY_CONTAINER_XML';
     public const ENVIRONMENT_VARIABLE = 'MAGO_SYMFONY_CONTAINER_MAP';
+    public const STRICT_UNKNOWN_SERVICES_VARIABLE = 'MAGO_SYMFONY_STRICT_CONTAINER_SERVICES';
     public const DEFAULT_PATH = '.mago/symfony-container.json';
 
     private const CACHE_XML_GLOBS = [
@@ -37,16 +38,29 @@ final class ServiceClassMap
     /** @var array<string, ParameterDescriptor> */
     private array $parameters;
 
+    /** @var array<string, bool> */
+    private array $visibility;
+
+    private bool $fromXml;
+
     /**
      * @param array<string, string> $classes
      * @param array<string, ServiceFactory> $factories
      * @param array<string, ParameterDescriptor> $parameters
+     * @param array<string, bool> $visibility
      */
-    private function __construct(array $classes, array $factories = [], array $parameters = [])
-    {
+    private function __construct(
+        array $classes,
+        array $factories = [],
+        array $parameters = [],
+        array $visibility = [],
+        bool $fromXml = false,
+    ) {
         $this->classes = $classes;
         $this->factories = $factories;
         $this->parameters = $parameters;
+        $this->visibility = $visibility;
+        $this->fromXml = $fromXml;
     }
 
     public static function fromEnvironment(): self
@@ -94,14 +108,36 @@ final class ServiceClassMap
     {
         $loaded = ContainerXmlLoader::loadFile($path);
 
-        return new self($loaded['classes'], $loaded['factories'], $loaded['parameters']);
+        return new self(
+            $loaded['classes'],
+            $loaded['factories'],
+            $loaded['parameters'],
+            $loaded['visibility'],
+            $loaded['visibility'] !== [],
+        );
     }
 
     public static function fromXmlString(string $xml): self
     {
         $loaded = ContainerXmlLoader::loadString($xml);
 
-        return new self($loaded['classes'], $loaded['factories'], $loaded['parameters']);
+        return new self(
+            $loaded['classes'],
+            $loaded['factories'],
+            $loaded['parameters'],
+            $loaded['visibility'],
+            $loaded['visibility'] !== [],
+        );
+    }
+
+    public static function strictUnknownServicesFromEnvironment(): bool
+    {
+        $value = getenv(self::STRICT_UNKNOWN_SERVICES_VARIABLE);
+        if ($value === false) {
+            return false;
+        }
+
+        return in_array(strtolower(trim($value)), ['1', 'true', 'yes', 'on'], true);
     }
 
     public static function fromJsonFile(string $path): self
@@ -166,6 +202,21 @@ final class ServiceClassMap
     public function parameterFor(string $name): ?array
     {
         return $this->parameters[$name] ?? null;
+    }
+
+    public function isXmlLoaded(): bool
+    {
+        return $this->fromXml;
+    }
+
+    public function isKnownService(string $id): bool
+    {
+        return array_key_exists($id, $this->visibility);
+    }
+
+    public function isPrivateService(string $id): bool
+    {
+        return isset($this->visibility[$id]) && $this->visibility[$id] === false;
     }
 
     /** @return ParameterDescriptor */

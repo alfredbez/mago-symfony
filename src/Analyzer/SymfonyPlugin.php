@@ -6,6 +6,7 @@ namespace AlfredBez\MagoSymfony\Analyzer;
 
 use AlfredBez\MagoSymfony\Analyzer\Providers\ConfigEndReturnTypeProvider;
 use AlfredBez\MagoSymfony\Analyzer\Providers\ConsoleCommandArgumentsHook;
+use AlfredBez\MagoSymfony\Analyzer\Providers\ContainerGetAccessHook;
 use AlfredBez\MagoSymfony\Analyzer\Providers\ContainerGetReturnTypeProvider;
 use AlfredBez\MagoSymfony\Analyzer\Providers\FormGetErrorsReturnTypeProvider;
 use AlfredBez\MagoSymfony\Analyzer\Providers\HeaderBagGetReturnTypeProvider;
@@ -52,6 +53,14 @@ final class SymfonyPlugin implements Plugin
         }
         $registry->registerClassInitializerProvider(new RequiredInitializerProvider());
         $registry->registerMethodCallAnalysisHook(new TreeBuilderRootNodeHook());
+        if ($container->isXmlLoaded()) {
+            $registry->registerMethodCallAnalysisHook(
+                new ContainerGetAccessHook(
+                    $container,
+                    ServiceClassMap::strictUnknownServicesFromEnvironment(),
+                ),
+            );
+        }
         $registry->registerClassLikeAnalysisHook(new ConsoleCommandArgumentsHook());
         $registry->registerIssueFilterHook(new TreeBuilderReturnIssueFilter());
     }

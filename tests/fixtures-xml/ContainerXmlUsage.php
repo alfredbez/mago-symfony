@@ -7,18 +7,30 @@ namespace SymfonyFixtureXml;
 use Psr\Container\ContainerInterface as PsrContainer;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\DependencyInjection\Container;
+use Symfony\Component\DependencyInjection\ContainerBuilder;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 use Symfony\Component\DependencyInjection\ParameterBag\ParameterBagInterface;
+use Symfony\Component\DependencyInjection\ServiceLocator;
 use SymfonyFixture\ConcreteGreeter;
 use SymfonyFixture\Mailer;
 
 final class ContainerXmlUsage extends AbstractController
 {
-    public function xmlServices(PsrContainer $psr, ContainerInterface $sf, Container $concrete): void
-    {
+    /** @param ServiceLocator<object> $locator */
+    public function xmlServices(
+        PsrContainer $psr,
+        ContainerInterface $sf,
+        Container $concrete,
+        ServiceLocator $locator,
+        ContainerBuilder $builder,
+    ): void {
         $psr->get('xml.public.greeter')->implementationOnly();
-        $sf->get('xml.private.greeter')->implementationOnly();
+        $sf->get('xml.public.greeter')->implementationOnly();
+        $locator->get('xml.private.greeter')->implementationOnly();
+        $builder->get('xml.private.greeter')->implementationOnly();
+        $this->container->get('xml.private.greeter')->implementationOnly();
         $concrete->get('xml.synthetic.mailer')->send('ops@example.com');
+        $sf->get('xml.alias.public')->implementationOnly();
         $psr->get('xml.alias.chain')->implementationOnly();
         $psr->get('xml.factory.class')->implementationOnly();
         $psr->get('xml.factory.subtype')->implementationOnly();
