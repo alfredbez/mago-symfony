@@ -58,7 +58,7 @@ final class TreeBuilderHookWorkload1
         $arrayTree = new TreeBuilder('array_1_0');
         $arrayTree->getRootNode()->children()->scalarNode('k')->defaultValue($pre11 . $post11)->end()->end();
 
-        return $tree;
+        return $arrayTree;
     }
 
     public function hookScenario1(BenchService00 $service): TreeBuilder
@@ -110,7 +110,7 @@ final class TreeBuilderHookWorkload1
         $arrayTree = new TreeBuilder('array_1_1');
         $arrayTree->getRootNode()->children()->scalarNode('k')->defaultValue($pre11 . $post11)->end()->end();
 
-        return $tree;
+        return $arrayTree;
     }
 
     public function hookScenario2(BenchService00 $service): TreeBuilder
@@ -162,7 +162,7 @@ final class TreeBuilderHookWorkload1
         $arrayTree = new TreeBuilder('array_1_2');
         $arrayTree->getRootNode()->children()->scalarNode('k')->defaultValue($pre11 . $post11)->end()->end();
 
-        return $tree;
+        return $arrayTree;
     }
 
     public function hookScenario3(BenchService00 $service): TreeBuilder
@@ -214,7 +214,7 @@ final class TreeBuilderHookWorkload1
         $arrayTree = new TreeBuilder('array_1_3');
         $arrayTree->getRootNode()->children()->scalarNode('k')->defaultValue($pre11 . $post11)->end()->end();
 
-        return $tree;
+        return $arrayTree;
     }
 
     public function hookScenario4(BenchService00 $service): TreeBuilder
@@ -266,7 +266,7 @@ final class TreeBuilderHookWorkload1
         $arrayTree = new TreeBuilder('array_1_4');
         $arrayTree->getRootNode()->children()->scalarNode('k')->defaultValue($pre11 . $post11)->end()->end();
 
-        return $tree;
+        return $arrayTree;
     }
 
     public function hookScenario5(BenchService00 $service): TreeBuilder
@@ -318,7 +318,7 @@ final class TreeBuilderHookWorkload1
         $arrayTree = new TreeBuilder('array_1_5');
         $arrayTree->getRootNode()->children()->scalarNode('k')->defaultValue($pre11 . $post11)->end()->end();
 
-        return $tree;
+        return $arrayTree;
     }
 
     public function hookScenario6(BenchService00 $service): TreeBuilder
@@ -370,7 +370,7 @@ final class TreeBuilderHookWorkload1
         $arrayTree = new TreeBuilder('array_1_6');
         $arrayTree->getRootNode()->children()->scalarNode('k')->defaultValue($pre11 . $post11)->end()->end();
 
-        return $tree;
+        return $arrayTree;
     }
 
     public function hookScenario7(BenchService00 $service): TreeBuilder
@@ -422,7 +422,7 @@ final class TreeBuilderHookWorkload1
         $arrayTree = new TreeBuilder('array_1_7');
         $arrayTree->getRootNode()->children()->scalarNode('k')->defaultValue($pre11 . $post11)->end()->end();
 
-        return $tree;
+        return $arrayTree;
     }
 
     public function hookScenario8(BenchService00 $service): TreeBuilder
@@ -474,7 +474,7 @@ final class TreeBuilderHookWorkload1
         $arrayTree = new TreeBuilder('array_1_8');
         $arrayTree->getRootNode()->children()->scalarNode('k')->defaultValue($pre11 . $post11)->end()->end();
 
-        return $tree;
+        return $arrayTree;
     }
 
     public function hookScenario9(BenchService00 $service): TreeBuilder
@@ -526,6 +526,6 @@ final class TreeBuilderHookWorkload1
         $arrayTree = new TreeBuilder('array_1_9');
         $arrayTree->getRootNode()->children()->scalarNode('k')->defaultValue($pre11 . $post11)->end()->end();
 
-        return $tree;
+        return $arrayTree;
     }
 }

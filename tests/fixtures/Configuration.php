@@ -88,12 +88,10 @@ final class Configuration implements ConfigurationInterface
         return $callbacks;
     }
 
-    public function scalarRootTreeBuilder(): TreeBuilder
+    public function scalarRootTreeBuilder(): void
     {
         $treeBuilder = new TreeBuilder('scalar_root', 'scalar');
         $treeBuilder->getRootNode()->isRequired()->end();
-
-        return $treeBuilder;
     }
 
     public function customNodeBuilder(CustomNodeBuilder $builder): ?ArrayNodeDefinition

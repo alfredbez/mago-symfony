@@ -75,7 +75,7 @@ final class ConfigWorkload2
     {
         $node = new ArrayNodeDefinition('bench_2_0_standalone');
         $node
-            ->prototype('INTEGER')->min(0)->end()
+            ->prototype('integer')->min(0)->end()
             ->prototype('enum')->values(['a', 'b'])->end()
             ->variablePrototype()->defaultNull()->end()
             ->validate()
@@ -152,7 +152,7 @@ final class ConfigWorkload2
     {
         $node = new ArrayNodeDefinition('bench_2_1_standalone');
         $node
-            ->prototype('INTEGER')->min(0)->end()
+            ->prototype('integer')->min(0)->end()
             ->prototype('enum')->values(['a', 'b'])->end()
             ->variablePrototype()->defaultNull()->end()
             ->validate()
@@ -229,7 +229,7 @@ final class ConfigWorkload2
     {
         $node = new ArrayNodeDefinition('bench_2_2_standalone');
         $node
-            ->prototype('INTEGER')->min(0)->end()
+            ->prototype('integer')->min(0)->end()
             ->prototype('enum')->values(['a', 'b'])->end()
             ->variablePrototype()->defaultNull()->end()
             ->validate()
@@ -306,7 +306,7 @@ final class ConfigWorkload2
     {
         $node = new ArrayNodeDefinition('bench_2_3_standalone');
         $node
-            ->prototype('INTEGER')->min(0)->end()
+            ->prototype('integer')->min(0)->end()
             ->prototype('enum')->values(['a', 'b'])->end()
             ->variablePrototype()->defaultNull()->end()
             ->validate()
@@ -383,7 +383,7 @@ final class ConfigWorkload2
     {
         $node = new ArrayNodeDefinition('bench_2_4_standalone');
         $node
-            ->prototype('INTEGER')->min(0)->end()
+            ->prototype('integer')->min(0)->end()
             ->prototype('enum')->values(['a', 'b'])->end()
             ->variablePrototype()->defaultNull()->end()
             ->validate()
@@ -460,7 +460,7 @@ final class ConfigWorkload2
     {
         $node = new ArrayNodeDefinition('bench_2_5_standalone');
         $node
-            ->prototype('INTEGER')->min(0)->end()
+            ->prototype('integer')->min(0)->end()
             ->prototype('enum')->values(['a', 'b'])->end()
             ->variablePrototype()->defaultNull()->end()
             ->validate()
@@ -537,7 +537,7 @@ final class ConfigWorkload2
     {
         $node = new ArrayNodeDefinition('bench_2_6_standalone');
         $node
-            ->prototype('INTEGER')->min(0)->end()
+            ->prototype('integer')->min(0)->end()
             ->prototype('enum')->values(['a', 'b'])->end()
             ->variablePrototype()->defaultNull()->end()
             ->validate()
@@ -614,7 +614,7 @@ final class ConfigWorkload2
     {
         $node = new ArrayNodeDefinition('bench_2_7_standalone');
         $node
-            ->prototype('INTEGER')->min(0)->end()
+            ->prototype('integer')->min(0)->end()
             ->prototype('enum')->values(['a', 'b'])->end()
             ->variablePrototype()->defaultNull()->end()
             ->validate()
@@ -691,7 +691,7 @@ final class ConfigWorkload2
     {
         $node = new ArrayNodeDefinition('bench_2_8_standalone');
         $node
-            ->prototype('INTEGER')->min(0)->end()
+            ->prototype('integer')->min(0)->end()
             ->prototype('enum')->values(['a', 'b'])->end()
             ->variablePrototype()->defaultNull()->end()
             ->validate()
@@ -768,7 +768,7 @@ final class ConfigWorkload2
     {
         $node = new ArrayNodeDefinition('bench_2_9_standalone');
         $node
-            ->prototype('INTEGER')->min(0)->end()
+            ->prototype('integer')->min(0)->end()
             ->prototype('enum')->values(['a', 'b'])->end()
             ->variablePrototype()->defaultNull()->end()
             ->validate()
@@ -845,7 +845,7 @@ final class ConfigWorkload2
     {
         $node = new ArrayNodeDefinition('bench_2_10_standalone');
         $node
-            ->prototype('INTEGER')->min(0)->end()
+            ->prototype('integer')->min(0)->end()
             ->prototype('enum')->values(['a', 'b'])->end()
             ->variablePrototype()->defaultNull()->end()
             ->validate()
@@ -922,7 +922,7 @@ final class ConfigWorkload2
     {
         $node = new ArrayNodeDefinition('bench_2_11_standalone');
         $node
-            ->prototype('INTEGER')->min(0)->end()
+            ->prototype('integer')->min(0)->end()
             ->prototype('enum')->values(['a', 'b'])->end()
             ->variablePrototype()->defaultNull()->end()
             ->validate()

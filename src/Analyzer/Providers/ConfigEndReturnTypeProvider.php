@@ -9,6 +9,8 @@ use Mago\Sdk\Analyzer\MethodTarget;
 use Mago\Sdk\Analyzer\ReturnTypeProviderContext;
 use Mago\Sdk\Analyzer\Type;
 use Mago\Sdk\Analyzer\Type\NamedObjectType;
+use Mago\Sdk\Analyzer\Type\SimpleAtomicType;
+use Mago\Sdk\Analyzer\Type\SimpleAtomicTypeKind;
 
 /**
  * Tracks parent-child fluent chains across Symfony Config TreeBuilder nodes.
@@ -38,6 +40,7 @@ final class ConfigEndReturnTypeProvider implements MethodReturnTypeProvider
     private const NODE_TYPE_MAP = [
         'variable' => self::NS . 'VariableNodeDefinition',
         'scalar' => self::NS . 'ScalarNodeDefinition',
+        'string' => self::NS . 'StringNodeDefinition',
         'boolean' => self::NS . 'BooleanNodeDefinition',
         'integer' => self::NS . 'IntegerNodeDefinition',
         'float' => self::NS . 'FloatNodeDefinition',
@@ -49,6 +52,7 @@ final class ConfigEndReturnTypeProvider implements MethodReturnTypeProvider
         self::NODE_DEFINITION => true,
         self::ARRAY_NODE_DEFINITION => true,
         self::NS . 'ScalarNodeDefinition' => true,
+        self::NS . 'StringNodeDefinition' => true,
         self::NS . 'BooleanNodeDefinition' => true,
         self::NS . 'IntegerNodeDefinition' => true,
         self::NS . 'FloatNodeDefinition' => true,
@@ -60,6 +64,7 @@ final class ConfigEndReturnTypeProvider implements MethodReturnTypeProvider
         self::LOWER_NODE_DEFINITION => true,
         'symfony\\component\\config\\definition\\builder\\arraynodedefinition' => true,
         'symfony\\component\\config\\definition\\builder\\scalarnodedefinition' => true,
+        'symfony\\component\\config\\definition\\builder\\stringnodedefinition' => true,
         'symfony\\component\\config\\definition\\builder\\booleannodedefinition' => true,
         'symfony\\component\\config\\definition\\builder\\integernodedefinition' => true,
         'symfony\\component\\config\\definition\\builder\\floatnodedefinition' => true,
@@ -74,6 +79,7 @@ final class ConfigEndReturnTypeProvider implements MethodReturnTypeProvider
         'floatnode' => self::NODE_TYPE_MAP['float'],
         'integernode' => self::NODE_TYPE_MAP['integer'],
         'scalarnode' => self::NODE_TYPE_MAP['scalar'],
+        'stringnode' => self::NODE_TYPE_MAP['string'],
         'variablenode' => self::NODE_TYPE_MAP['variable'],
     ];
 
@@ -84,6 +90,7 @@ final class ConfigEndReturnTypeProvider implements MethodReturnTypeProvider
         'floatprototype' => self::NODE_TYPE_MAP['float'],
         'integerprototype' => self::NODE_TYPE_MAP['integer'],
         'scalarprototype' => self::NODE_TYPE_MAP['scalar'],
+        'stringprototype' => self::NODE_TYPE_MAP['string'],
         'variableprototype' => self::NODE_TYPE_MAP['variable'],
     ];
 
@@ -135,6 +142,7 @@ final class ConfigEndReturnTypeProvider implements MethodReturnTypeProvider
             'floatNode' => $this->resolveBuilderNode($context, self::NODE_TYPE_MAP['float'], $receiver),
             'integerNode' => $this->resolveBuilderNode($context, self::NODE_TYPE_MAP['integer'], $receiver),
             'scalarNode' => $this->resolveBuilderNode($context, self::NODE_TYPE_MAP['scalar'], $receiver),
+            'stringNode' => $this->resolveBuilderNode($context, self::NODE_TYPE_MAP['string'], $receiver),
             'variableNode' => $this->resolveBuilderNode($context, self::NODE_TYPE_MAP['variable'], $receiver),
             'arrayPrototype' => $this->resolvePrototypeShortcut($context, self::ARRAY_NODE_DEFINITION, $receiver),
             'booleanPrototype' => $this->resolvePrototypeShortcut($context, self::NODE_TYPE_MAP['boolean'], $receiver),
@@ -142,6 +150,7 @@ final class ConfigEndReturnTypeProvider implements MethodReturnTypeProvider
             'floatPrototype' => $this->resolvePrototypeShortcut($context, self::NODE_TYPE_MAP['float'], $receiver),
             'integerPrototype' => $this->resolvePrototypeShortcut($context, self::NODE_TYPE_MAP['integer'], $receiver),
             'scalarPrototype' => $this->resolvePrototypeShortcut($context, self::NODE_TYPE_MAP['scalar'], $receiver),
+            'stringPrototype' => $this->resolvePrototypeShortcut($context, self::NODE_TYPE_MAP['string'], $receiver),
             'variablePrototype' => $this->resolvePrototypeShortcut($context, self::NODE_TYPE_MAP['variable'], $receiver),
             default => $this->dispatchNormalizedMethod($context, strtolower($name), $receiver),
         };
@@ -213,12 +222,43 @@ final class ConfigEndReturnTypeProvider implements MethodReturnTypeProvider
 
     private function nodeParent(?Type $builder): ?Type
     {
-        if ($builder === null || $this->extractParent($builder) !== null) {
-            return $builder;
+        if ($builder === null) {
+            return null;
         }
 
-        // NodeBuilder::append() sets the child's parent only when the builder has a parent.
-        return Type::union($builder, $this->nullType ??= Type::null());
+        $builderParent = $this->extractParent($builder);
+        if ($builderParent === null) {
+            // NodeBuilder::append() sets the child's parent only when the builder has a parent.
+            return Type::union($builder, $this->nullType ??= Type::null());
+        }
+
+        if (self::isNullOnly($builderParent)) {
+            return $this->nullType ??= Type::null();
+        }
+
+        if (self::containsNull($builderParent)) {
+            return Type::union($builder, $this->nullType ??= Type::null());
+        }
+
+        return $builder;
+    }
+
+    private static function isNullOnly(Type $type): bool
+    {
+        return count($type->atomicTypes) === 1
+            && $type->atomicTypes[0] instanceof SimpleAtomicType
+            && $type->atomicTypes[0]->kind === SimpleAtomicTypeKind::Null;
+    }
+
+    private static function containsNull(Type $type): bool
+    {
+        foreach ($type->atomicTypes as $atomic) {
+            if ($atomic instanceof SimpleAtomicType && $atomic->kind === SimpleAtomicTypeKind::Null) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private function resolveEnd(ReturnTypeProviderContext $context, ?Type $receiver): ?Type

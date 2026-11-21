@@ -29,6 +29,7 @@ final class TreeBuilderRootNodeHook implements MethodCallAnalysisHook
     private const NODE_TYPE_MAP = [
         'variable' => self::NS . 'VariableNodeDefinition',
         'scalar' => self::NS . 'ScalarNodeDefinition',
+        'string' => self::NS . 'StringNodeDefinition',
         'boolean' => self::NS . 'BooleanNodeDefinition',
         'integer' => self::NS . 'IntegerNodeDefinition',
         'float' => self::NS . 'FloatNodeDefinition',

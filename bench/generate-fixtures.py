@@ -250,7 +250,7 @@ def generate_config_workloads() -> None:
     {{
         $node = new ArrayNodeDefinition('{name}_standalone');
         $node
-            ->prototype('INTEGER')->min(0)->end()
+            ->prototype('integer')->min(0)->end()
             ->prototype('enum')->values(['a', 'b'])->end()
             ->variablePrototype()->defaultNull()->end()
             ->validate()
@@ -331,7 +331,7 @@ def generate_hook_workloads() -> None:
         $arrayTree = new TreeBuilder('array_{file_idx}_{method_idx}');
         $arrayTree->getRootNode()->children()->scalarNode('k')->defaultValue($pre11 . $post11)->end()->end();
 
-        return $tree;
+        return $arrayTree;
     }}
 """)
 

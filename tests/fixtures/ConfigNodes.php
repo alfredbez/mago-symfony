@@ -28,7 +28,7 @@ final class ConfigNodes
         return (new ArrayNodeDefinition('items'))
             ->prototype('scalar')->cannotBeEmpty()->end()
             ->booleanPrototype()->defaultTrue()->end()
-            ->prototype('INTEGER')->min(0)->end()
+            ->prototype('integer')->min(0)->end()
             ->floatPrototype()->max(2.0)->end()
             ->prototype('enum')->values(['x'])->end()
             ->variablePrototype()->defaultNull()->end()

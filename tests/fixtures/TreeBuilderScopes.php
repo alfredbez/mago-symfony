@@ -12,9 +12,9 @@ final class TreeBuilderScopes
     public function nestedTreeAssignment(): void
     {
         $tree = new TreeBuilder('root');
-        $factory = static function (): TreeBuilder {
+        $factory = static function (): void {
             $tree = new TreeBuilder('inner', 'scalar');
-            return $tree;
+            $tree->getRootNode()->isRequired();
         };
         $factory();
         $tree->getRootNode()->children();

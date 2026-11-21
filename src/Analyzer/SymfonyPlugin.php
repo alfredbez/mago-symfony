@@ -8,6 +8,7 @@ use AlfredBez\MagoSymfony\Analyzer\Providers\ConfigEndReturnTypeProvider;
 use AlfredBez\MagoSymfony\Analyzer\Providers\ContainerGetReturnTypeProvider;
 use AlfredBez\MagoSymfony\Analyzer\Providers\RootNodeReturnTypeProvider;
 use AlfredBez\MagoSymfony\Analyzer\Providers\ServiceClassMap;
+use AlfredBez\MagoSymfony\Analyzer\Providers\TreeBuilderReturnIssueFilter;
 use AlfredBez\MagoSymfony\Analyzer\Providers\TreeBuilderRootNodeHook;
 use Mago\Sdk\Analyzer\Plugin;
 use Mago\Sdk\Analyzer\PluginDefinition;
@@ -32,5 +33,6 @@ final class SymfonyPlugin implements Plugin
         $registry->registerMethodReturnTypeProvider(new RootNodeReturnTypeProvider());
         $registry->registerMethodReturnTypeProvider(new ConfigEndReturnTypeProvider());
         $registry->registerMethodCallAnalysisHook(new TreeBuilderRootNodeHook());
+        $registry->registerIssueFilterHook(new TreeBuilderReturnIssueFilter());
     }
 }

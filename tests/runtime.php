@@ -51,6 +51,11 @@ require __DIR__ . '/fixtures/ConfigNodes.php';
 $nodes = new \SymfonyFixture\ConfigNodes();
 check($nodes->nodes() instanceof \Symfony\Component\Config\Definition\Builder\ArrayNodeDefinition, 'Every node end returns to its actual parent');
 check($nodes->prototypes() instanceof \Symfony\Component\Config\Definition\Builder\ArrayNodeDefinition, 'Every prototype end returns to its array');
+check(
+    (new \Symfony\Component\Config\Definition\Builder\ArrayNodeDefinition('upper'))
+        ->prototype('INTEGER')->end() instanceof \Symfony\Component\Config\Definition\Builder\ArrayNodeDefinition,
+    'Uppercase prototype names remain valid at runtime',
+);
 
 require __DIR__ . '/fixtures/TreeBuilderScopes.php';
 require __DIR__ . '/fixtures/TreeBuilderScopesNegative.php';
