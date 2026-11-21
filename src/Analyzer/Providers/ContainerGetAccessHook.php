@@ -95,6 +95,14 @@ final class ContainerGetAccessHook implements MethodCallAnalysisHook
             return;
         }
 
+        $behaviorIndex = $this->findArgumentIndex($context->source, $context->node, 1, 'invalidBehavior');
+        if ($behaviorIndex !== null) {
+            $behavior = $context->argumentTypes[$behaviorIndex]?->getLiteralInt();
+            if ($behavior !== self::EXCEPTION_ON_INVALID_REFERENCE) {
+                return;
+            }
+        }
+
         if ($this->services->isPrivateService($id)) {
             $context->report(
                 Level::Error,
@@ -110,14 +118,6 @@ final class ContainerGetAccessHook implements MethodCallAnalysisHook
 
         if (!$this->strictUnknownServices || $this->services->isKnownService($id)) {
             return;
-        }
-
-        $behaviorIndex = $this->findArgumentIndex($context->source, $context->node, 1, 'invalidBehavior');
-        if ($behaviorIndex !== null) {
-            $behavior = $context->argumentTypes[$behaviorIndex]?->getLiteralInt();
-            if ($behavior !== self::EXCEPTION_ON_INVALID_REFERENCE) {
-                return;
-            }
         }
 
         $context->report(

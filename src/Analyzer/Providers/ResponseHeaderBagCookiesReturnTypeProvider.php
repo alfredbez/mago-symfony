@@ -8,6 +8,8 @@ use Mago\Sdk\Analyzer\MethodReturnTypeProvider;
 use Mago\Sdk\Analyzer\MethodTarget;
 use Mago\Sdk\Analyzer\ReturnTypeProviderContext;
 use Mago\Sdk\Analyzer\Type;
+use Mago\Sdk\Analyzer\Type\ScalarType;
+use Mago\Sdk\Analyzer\Type\ScalarTypeKind;
 
 /**
  * Narrows ResponseHeaderBag::getCookies($format) based on COOKIES_FLAT vs COOKIES_ARRAY.
@@ -36,16 +38,21 @@ final class ResponseHeaderBagCookiesReturnTypeProvider implements MethodReturnTy
         }
 
         if ($format === 'array') {
-            return $this->arrayType ??= Type::array(
-                Type::string(),
-                Type::array(
-                    Type::string(),
+            if ($this->arrayType === null) {
+                $arrayKey = Type::fromAtomic(new ScalarType(ScalarTypeKind::ArrayKey));
+                $this->arrayType = Type::array(
+                    $arrayKey,
                     Type::array(
-                        Type::string(),
-                        Type::namedObject(self::COOKIE),
+                        $arrayKey,
+                        Type::array(
+                            $arrayKey,
+                            Type::namedObject(self::COOKIE),
+                        ),
                     ),
-                ),
-            );
+                );
+            }
+
+            return $this->arrayType;
         }
 
         return null;

@@ -82,7 +82,7 @@ final class ConsoleCommandArgumentsHook implements ClassLikeAnalysisHook
             return;
         }
 
-        $definition = ConsoleCommandDefinition::parseConfigure($source, $configure);
+        $definition = ConsoleCommandDefinition::parseConfigure($source, $configure, $context->analysis);
 
         foreach ($definition->definitionErrors as $error) {
             $context->report(

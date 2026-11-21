@@ -18,12 +18,18 @@ use Symfony\Component\HttpFoundation\Cookie;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\ResponseHeaderBag;
 
+final class CustomModes
+{
+    public const REQUIRED = InputArgument::OPTIONAL;
+}
+
 final class Wave5HelperCommand extends Command
 {
     protected function configure(): void
     {
         $this
             ->addArgument('name', InputArgument::REQUIRED)
+            ->addArgument('alias_opt', CustomModes::REQUIRED, '', 'valid-default')
             ->addArgument('tags', InputArgument::OPTIONAL | InputArgument::IS_ARRAY, '', ['default'])
             ->addOption('flag', null, InputOption::VALUE_NONE)
             ->addOption('items', null, InputOption::VALUE_REQUIRED | InputOption::VALUE_IS_ARRAY, '', ['a'])

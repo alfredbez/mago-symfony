@@ -543,7 +543,7 @@
       ],
       "fixture": "<?php function priv(\\Symfony\\Component\\DependencyInjection\\ContainerInterface $c): void { $c->get('xml.private.greeter'); }",
       "semantics": "Compiled Symfony container XML marks public services and aliases with public=\"true\". Fetching a private service directly from ContainerInterface::get() or Container::get() throws ServiceNotFoundException outside ServiceLocator, ContainerBuilder, TestContainer, and TestCase subclasses. ContainerInterface::has() narrowing cannot be expressed in Mago 1.60.2 InvocationAssertions.",
-      "analyzer_expectation": "Report private-service-access on compiled XML containers for direct ContainerInterface/Container::get() calls on private services/aliases, and report unknown-service-id when MAGO_SYMFONY_STRICT_CONTAINER_SERVICES=1 is enabled with throwing invalidBehavior, while skipping ServiceLocator, ContainerBuilder, TestContainer, and PHPUnit TestCase subclasses.",
+      "analyzer_expectation": "Report private-service-access on compiled XML containers for direct throwing ContainerInterface/Container::get() calls on private services/aliases, and report unknown-service-id when MAGO_SYMFONY_STRICT_CONTAINER_SERVICES=1 is enabled with throwing invalidBehavior, while skipping ServiceLocator, ContainerBuilder, TestContainer, PHPUnit TestCase subclasses, and non-throwing invalidBehavior flags.",
       "negative_control": "ContainerXmlNegative reports 2 private-service-access errors (and 1 unknown-service-id in strict mode, skipping NULL_ON_INVALID_REFERENCE); ContainerXmlUsage (ServiceLocator, ContainerBuilder, AbstractController::$container, public alias) reports 0; symfony-demo corpus passes with 0 added issues.",
       "priority": "P0",
       "versions": "Verified on Mago 1.60.2 / PHP 8.3 against Symfony 6.4, 7.4, and symfony/demo App_KernelDevDebugContainer.xml.",
@@ -585,8 +585,8 @@
         "symfony-response-header-bag"
       ],
       "fixture": "<?php function nestedCookies(\\Symfony\\Component\\HttpFoundation\\ResponseHeaderBag $h): void { foreach ($h->getCookies(\\Symfony\\Component\\HttpFoundation\\ResponseHeaderBag::COOKIES_ARRAY) as $paths) { foreach ($paths as $cookies) { foreach ($cookies as $c) { $c->getName(); } } } }",
-      "semantics": "ResponseHeaderBag::getCookies($format = self::COOKIES_FLAT) returns list<Cookie> for COOKIES_FLAT ('flat') and array<string, array<string, array<string, Cookie>>> for COOKIES_ARRAY ('array'), whereas Symfony's docblock declares only Cookie[].",
-      "analyzer_expectation": "Return list<Cookie> when $format is omitted or 'flat' and nested domain/path/name Cookie arrays when $format is 'array'.",
+      "semantics": "ResponseHeaderBag::getCookies($format = self::COOKIES_FLAT) returns list<Cookie> for COOKIES_FLAT ('flat') and array<array-key, array<array-key, array<array-key, Cookie>>> for COOKIES_ARRAY ('array') because PHP converts numeric-string cookie names and domain/path keys to int, whereas Symfony's docblock declares only Cookie[].",
+      "analyzer_expectation": "Return list<Cookie> when $format is omitted or 'flat' and nested array-key-indexed Cookie arrays when $format is 'array'.",
       "negative_control": "Calling missing methods on flat or nested Cookie elements reports non-existent-method; disabling extensions triggers non-iterable-object-iteration and invalid-iterator on COOKIES_ARRAY loops.",
       "priority": "P1",
       "versions": "Verified on Mago 1.60.2 / PHP 8.3 against Symfony HttpFoundation 6.4 and 7.4.",
@@ -606,7 +606,7 @@
         "symfony-console-application"
       ],
       "fixture": "<?php function helper(\\Symfony\\Component\\Console\\Helper\\HelperSet $h): \\Symfony\\Component\\Console\\Helper\\QuestionHelper { return $h->get('question'); }",
-      "semantics": "Application::getDefaultHelperSet() registers formatter (FormatterHelper), debug_formatter (DebugFormatterHelper), process (ProcessHelper), and question (QuestionHelper).",
+      "semantics": "Application::getDefaultHelperSet() registers formatter (FormatterHelper), debug_formatter (DebugFormatterHelper), process (ProcessHelper), and question (QuestionHelper). Narrowing assumes these four built-in helper names are not remapped to unrelated classes at runtime.",
       "analyzer_expectation": "Narrow literal calls to HelperSet::get() and Command::getHelper() for the 4 built-in helper names when the target helper class exists in the codebase.",
       "negative_control": "Calling an unknown method on $helpers->get('question') reports non-existent-method on QuestionHelper; disabling extensions restores 4 less-specific-argument and 1 less-specific-return-statement diagnostics.",
       "priority": "P1",

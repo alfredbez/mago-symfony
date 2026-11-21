@@ -200,10 +200,12 @@ check($req->getPreferredFormat(null) === null, 'Request::getPreferredFormat(null
 
 $respHeaders = new \Symfony\Component\HttpFoundation\ResponseHeaderBag();
 $respHeaders->setCookie(\Symfony\Component\HttpFoundation\Cookie::create('sid', 'abc'));
+$respHeaders->setCookie(\Symfony\Component\HttpFoundation\Cookie::create('123', 'numeric-name'));
 $flatCookies = $respHeaders->getCookies(\Symfony\Component\HttpFoundation\ResponseHeaderBag::COOKIES_FLAT);
-check(array_is_list($flatCookies) && count($flatCookies) === 1 && $flatCookies[0] instanceof \Symfony\Component\HttpFoundation\Cookie, 'ResponseHeaderBag::getCookies(COOKIES_FLAT) returns list<Cookie>');
+check(array_is_list($flatCookies) && count($flatCookies) === 2 && $flatCookies[0] instanceof \Symfony\Component\HttpFoundation\Cookie, 'ResponseHeaderBag::getCookies(COOKIES_FLAT) returns list<Cookie>');
 $nestedCookies = $respHeaders->getCookies(\Symfony\Component\HttpFoundation\ResponseHeaderBag::COOKIES_ARRAY);
 check(isset($nestedCookies['']['/']['sid']) && $nestedCookies['']['/']['sid'] instanceof \Symfony\Component\HttpFoundation\Cookie, 'ResponseHeaderBag::getCookies(COOKIES_ARRAY) returns domain/path/name nested Cookie map');
+check(array_key_exists(123, $nestedCookies['']['/']) && $nestedCookies['']['/'][123] instanceof \Symfony\Component\HttpFoundation\Cookie, 'ResponseHeaderBag::getCookies(COOKIES_ARRAY) converts numeric string cookie names to int keys');
 
 $consoleApp = new \Symfony\Component\Console\Application();
 $defaultHelpers = $consoleApp->getHelperSet();

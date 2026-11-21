@@ -26,6 +26,8 @@ final class ContainerXmlUsage extends AbstractController
     ): void {
         $psr->get('xml.public.greeter')->implementationOnly();
         $sf->get('xml.public.greeter')->implementationOnly();
+        $sf->get('xml.private.greeter', ContainerInterface::NULL_ON_INVALID_REFERENCE)?->implementationOnly();
+        $sf->get(invalidBehavior: ContainerInterface::NULL_ON_INVALID_REFERENCE, id: 'xml.private.greeter')?->implementationOnly();
         $locator->get('xml.private.greeter')->implementationOnly();
         $builder->get('xml.private.greeter')->implementationOnly();
         $this->container->get('xml.private.greeter')->implementationOnly();

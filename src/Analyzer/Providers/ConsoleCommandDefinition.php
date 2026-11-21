@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace AlfredBez\MagoSymfony\Analyzer\Providers;
 
+use Mago\Sdk\Analyzer\FileAnalysis;
 use Mago\Sdk\Span;
 use Mago\Sdk\Syntax\Node;
 use Mago\Sdk\Syntax\NodeKind;
@@ -62,7 +63,7 @@ final class ConsoleCommandDefinition
         public readonly array $definitionErrors,
     ) {}
 
-    public static function parseConfigure(SourceFile $source, Node $configure): self
+    public static function parseConfigure(SourceFile $source, Node $configure, ?FileAnalysis $analysis = null): self
     {
         $arguments = [];
         $options = [];
@@ -79,7 +80,7 @@ final class ConsoleCommandDefinition
         foreach ($source->getDescendants($configure, NodeKind::MethodCall) as $call) {
             $methodName = strtolower(self::calledMethodName($source, $call) ?? '');
             if ($methodName === 'setdefinition') {
-                if (!self::extractSetDefinitionInputs($source, $call, $arguments, $options, $errors)) {
+                if (!self::extractSetDefinitionInputs($source, $call, $arguments, $options, $errors, $analysis)) {
                     $complete = false;
                 }
                 continue;
@@ -106,7 +107,7 @@ final class ConsoleCommandDefinition
             if ($methodName === 'addargument') {
                 $modeNode = self::resolveArgument($args, 1, 'mode');
                 $defaultNode = self::resolveArgument($args, 3, 'default');
-                $mode = $modeNode === null ? self::ARG_OPTIONAL : self::parseMode($source, $modeNode, self::ARGUMENT_MODES, self::ARG_OPTIONAL);
+                $mode = $modeNode === null ? self::ARG_OPTIONAL : self::parseMode($source, $modeNode, $analysis, 'symfony\\component\\console\\input\\inputargument', self::ARGUMENT_MODES, self::ARG_OPTIONAL);
                 $defaultKind = self::classifyDefault($source, $defaultNode);
                 $arguments[$literal] = ['mode' => $mode, 'defaultKind' => $defaultKind];
                 self::validateArgumentDefinition($literal, $mode, $defaultKind, $call->span, $errors);
@@ -118,7 +119,7 @@ final class ConsoleCommandDefinition
                 }
                 $modeNode = self::resolveArgument($args, 2, 'mode');
                 $defaultNode = self::resolveArgument($args, 4, 'default');
-                $mode = $modeNode === null ? self::OPT_VALUE_NONE : self::parseMode($source, $modeNode, self::OPTION_MODES, self::OPT_VALUE_NONE);
+                $mode = $modeNode === null ? self::OPT_VALUE_NONE : self::parseMode($source, $modeNode, $analysis, 'symfony\\component\\console\\input\\inputoption', self::OPTION_MODES, self::OPT_VALUE_NONE);
                 $defaultKind = self::classifyDefault($source, $defaultNode);
                 $options[$normalizedOption] = ['mode' => $mode, 'defaultKind' => $defaultKind];
                 self::validateOptionDefinition($normalizedOption, $mode, $defaultKind, $call->span, $errors);
@@ -143,6 +144,7 @@ final class ConsoleCommandDefinition
         array &$arguments,
         array &$options,
         array &$errors,
+        ?FileAnalysis $analysis,
     ): bool {
         $args = self::extractCallArguments($source, $call);
         $defArg = self::resolveArgument($args, 0, 'definition');
@@ -189,7 +191,7 @@ final class ConsoleCommandDefinition
             if ($isArg) {
                 $modeNode = self::resolveArgument($instArgs, 1, 'mode');
                 $defaultNode = self::resolveArgument($instArgs, 3, 'default');
-                $mode = $modeNode === null ? self::ARG_OPTIONAL : self::parseMode($source, $modeNode, self::ARGUMENT_MODES, self::ARG_OPTIONAL);
+                $mode = $modeNode === null ? self::ARG_OPTIONAL : self::parseMode($source, $modeNode, $analysis, 'symfony\\component\\console\\input\\inputargument', self::ARGUMENT_MODES, self::ARG_OPTIONAL);
                 $defaultKind = self::classifyDefault($source, $defaultNode);
                 $arguments[$literal] = ['mode' => $mode, 'defaultKind' => $defaultKind];
                 self::validateArgumentDefinition($literal, $mode, $defaultKind, $inst->span, $errors);
@@ -201,7 +203,7 @@ final class ConsoleCommandDefinition
                 }
                 $modeNode = self::resolveArgument($instArgs, 2, 'mode');
                 $defaultNode = self::resolveArgument($instArgs, 4, 'default');
-                $mode = $modeNode === null ? self::OPT_VALUE_NONE : self::parseMode($source, $modeNode, self::OPTION_MODES, self::OPT_VALUE_NONE);
+                $mode = $modeNode === null ? self::OPT_VALUE_NONE : self::parseMode($source, $modeNode, $analysis, 'symfony\\component\\console\\input\\inputoption', self::OPTION_MODES, self::OPT_VALUE_NONE);
                 $defaultKind = self::classifyDefault($source, $defaultNode);
                 $options[$normalized] = ['mode' => $mode, 'defaultKind' => $defaultKind];
                 self::validateOptionDefinition($normalized, $mode, $defaultKind, $inst->span, $errors);
@@ -300,8 +302,30 @@ final class ConsoleCommandDefinition
     /**
      * @param array<string, int> $constants
      */
-    private static function parseMode(SourceFile $source, Node $node, array $constants, int $defaultIfNull): ?int
-    {
+    private static function parseMode(
+        SourceFile $source,
+        Node $node,
+        ?FileAnalysis $analysis,
+        string $expectedOwnerLower,
+        array $constants,
+        int $defaultIfNull,
+    ): ?int {
+        if ($analysis !== null) {
+            $exprType = $analysis->getExpressionType($node);
+            if ($exprType === null) {
+                $unwrapped = self::unwrap($source, $node);
+                if ($unwrapped !== null) {
+                    $exprType = $analysis->getExpressionType($unwrapped);
+                }
+            }
+            if ($exprType !== null) {
+                $literalInt = $exprType->getLiteralInt();
+                if ($literalInt !== null) {
+                    return $literalInt;
+                }
+            }
+        }
+
         $text = trim($source->getText($node));
         if ($text === '') {
             return null;
@@ -311,8 +335,14 @@ final class ConsoleCommandDefinition
             return $defaultIfNull;
         }
 
+        $resolvedOwners = [];
+        foreach ($source->getResolvedNames($node) as $resolved) {
+            $resolvedOwners[] = strtolower(ltrim($resolved->name, '\\'));
+        }
+
         $parts = explode('|', $text);
         $mask = 0;
+        $ownerIndex = 0;
         foreach ($parts as $part) {
             $part = trim($part, " \t\n\r()");
             if ($part === '') {
@@ -325,6 +355,11 @@ final class ConsoleCommandDefinition
 
             $pos = strrpos($part, '::');
             if ($pos === false) {
+                return null;
+            }
+            $owner = $resolvedOwners[$ownerIndex] ?? null;
+            $ownerIndex++;
+            if ($owner !== $expectedOwnerLower) {
                 return null;
             }
             $constName = strtolower(substr($part, $pos + 2));

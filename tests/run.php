@@ -523,7 +523,7 @@ $xmlExpected = [
     ],
     true => [
         'tests/fixtures-xml/ContainerXmlUsage.php' => [
-            'ambiguous-object-method-access' => 4,
+            'ambiguous-object-method-access' => 6,
             'invalid-array-access' => 5,
             'less-specific-return-statement' => 1,
             'missing-constructor' => $isSymfony7 ? 1 : 0,
