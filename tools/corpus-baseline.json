@@ -3,10 +3,12 @@
     "targets": {
         "drupal": {
             "ref": "11.4.13",
-            "eliminated_count": 2,
+            "eliminated_count": 8,
             "eliminated_by_code": {
                 "ambiguous-object-method-access": 1,
-                "mixed-assignment": 1
+                "mixed-assignment": 1,
+                "possibly-null-argument": 3,
+                "possibly-null-operand": 3
             },
             "added_by_code": []
         },

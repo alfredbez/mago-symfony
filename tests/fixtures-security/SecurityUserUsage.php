@@ -60,15 +60,4 @@ final class SecurityUserController extends AbstractController
 
         return implode(',', $parts);
     }
-
-    public function negativeChecks(Security $security): void
-    {
-        $unguarded = $security->getUser();
-        $_ = $unguarded->getDisplayName();
-
-        $checked = $this->getUser();
-        if ($checked !== null) {
-            $checked->nonExistentMethodOnAppUser();
-        }
-    }
 }

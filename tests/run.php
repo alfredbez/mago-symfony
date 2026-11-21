@@ -620,18 +620,22 @@ $secUnconfigured = analyze(false, 'tests/mago-security.toml');
 $secNoExt = analyze(true, 'tests/mago-security.toml');
 
 $failures += assertHistograms('security configured', $secConfigured, [
-    'tests/fixtures-security/SecurityUserUsage.php' => [
+    'tests/fixtures-security/SecurityUserUsage.php' => [],
+    'tests/fixtures-security/SecurityUserNegative.php' => [
         'non-existent-method' => 1,
         'possible-method-access-on-null' => 1,
     ],
 ]);
-$failures += assertMessageCount('security configured', $secConfigured, 'tests/fixtures-security/SecurityUserUsage.php', 'non-existent-method', 'nonExistentMethodOnAppUser', 1);
+$failures += assertMessageCount('security configured', $secConfigured, 'tests/fixtures-security/SecurityUserNegative.php', 'non-existent-method', 'nonExistentMethodOnAppUser', 1);
 $failures += assertMessageCount('security configured', $secConfigured, 'tests/fixtures-security/SecurityUserUsage.php', 'non-existent-method', 'getDisplayName', 0);
 
 $unconfiguredSecurityExpected = [
     'tests/fixtures-security/SecurityUserUsage.php' => [
         'less-specific-nested-argument-type' => 1,
-        'non-existent-method' => 5,
+        'non-existent-method' => 3,
+    ],
+    'tests/fixtures-security/SecurityUserNegative.php' => [
+        'non-existent-method' => 2,
         'possible-method-access-on-null' => 1,
     ],
 ];
@@ -641,7 +645,11 @@ $failures += assertHistograms('security --no-extensions', $secNoExt, [
     'tests/fixtures-security/SecurityUserUsage.php' => [
         'less-specific-nested-argument-type' => 1,
         'missing-constructor' => $isSymfony7 ? 1 : 0,
-        'non-existent-method' => 5,
+        'non-existent-method' => 3,
+    ],
+    'tests/fixtures-security/SecurityUserNegative.php' => [
+        'missing-constructor' => $isSymfony7 ? 1 : 0,
+        'non-existent-method' => 2,
         'possible-method-access-on-null' => 1,
     ],
 ]);

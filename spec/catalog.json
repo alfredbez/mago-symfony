@@ -84,6 +84,54 @@
       "kind": "analyzer-test",
       "scope": "AbstractController::$container and #[Required] setter methods are initialized by Symfony DI autowiring.",
       "sha256": "cf4ecda6f5461cf37585d45fc956a91c95a3a4283434116c58e9e48c75a08d74"
+    },
+    "symfony-serializer-interface": {
+      "url": "https://github.com/symfony/serializer/blob/c82f9f05e59f5c975a8db803a87731c29f76be36/SerializerInterface.php",
+      "kind": "runtime-contract",
+      "scope": "Real Symfony SerializerInterface contract verified alongside Symfony 6.4 and 7.4 Serializer/Denormalizer runtime tests.",
+      "sha256": "4dc3ad0b6cb6afaea61eb9b6a900dcdbd212424ba8d1d3734c05d9b9e08092fa"
+    },
+    "symfony-token-interface": {
+      "url": "https://github.com/symfony/security-core/blob/22c96d6ba8756f42cf636c23f97185f4c8744ea1/Authentication/Token/TokenInterface.php",
+      "kind": "runtime-contract",
+      "scope": "TokenInterface::getUser() returns ?UserInterface; narrowed when MAGO_SYMFONY_USER_CLASS is configured.",
+      "sha256": "531e6c6af2cfabc14775c021cb40a592e757f8073686f00ca98d6813173bc487"
+    },
+    "phpstan-private-service": {
+      "url": "https://github.com/phpstan/phpstan-symfony/blob/92f34b806e90a5b7bc2baf04a680b71c72b9a62b/tests/Rules/Symfony/ContainerInterfacePrivateServiceRuleTest.php",
+      "kind": "analyzer-test",
+      "scope": "Private services cannot be fetched directly via public ContainerInterface::get(); no analyzer implementation copied.",
+      "sha256": "d4bfb9954c5a43c297680afc6b46647b6ff16a3cfb928559d7799e8e17130001"
+    },
+    "symfony-input-argument": {
+      "url": "https://github.com/symfony/console/blob/0c0bc13c6d0d2b07e5aa7dbac9a2199d06eac391/Input/InputArgument.php",
+      "kind": "runtime-contract",
+      "scope": "InputArgument::setDefault() rejects non-null defaults for REQUIRED and non-array defaults for IS_ARRAY.",
+      "sha256": "8a66f3594861e96fff61a6e6f94f1906ae1ed52bbfc3e54862e730b3cad6d47f"
+    },
+    "symfony-input-option": {
+      "url": "https://github.com/symfony/console/blob/0c0bc13c6d0d2b07e5aa7dbac9a2199d06eac391/Input/InputOption.php",
+      "kind": "runtime-contract",
+      "scope": "InputOption::__construct() and setDefault() reject invalid VALUE_NONE/VALUE_IS_ARRAY/VALUE_NEGATABLE combinations and defaults.",
+      "sha256": "7e2538353e5be60f820971415e238655609bad54e0ec4b669bebff658375e874"
+    },
+    "symfony-request": {
+      "url": "https://github.com/symfony/http-foundation/blob/fa85699b69cdd96265bc29425548f087cb2e6ca2/Request.php",
+      "kind": "runtime-contract",
+      "scope": "Request::getRequestFormat() and getPreferredFormat() return string whenever $default is omitted or non-null string.",
+      "sha256": "268a5e5ae4a9ce9ab5f56a75c70f24cc5d49665a59c20c3a7f8d57b1506e6704"
+    },
+    "symfony-response-header-bag": {
+      "url": "https://github.com/symfony/http-foundation/blob/fa85699b69cdd96265bc29425548f087cb2e6ca2/ResponseHeaderBag.php",
+      "kind": "runtime-contract",
+      "scope": "ResponseHeaderBag::getCookies() returns list<Cookie> for COOKIES_FLAT and nested domain/path/name Cookie arrays for COOKIES_ARRAY.",
+      "sha256": "44cacbe14ad61a9cd7414c22262478b3c67c0e2f5b0fcf644c35e3740b22422e"
+    },
+    "symfony-console-application": {
+      "url": "https://github.com/symfony/console/blob/0c0bc13c6d0d2b07e5aa7dbac9a2199d06eac391/Application.php",
+      "kind": "runtime-contract",
+      "scope": "Application::getDefaultHelperSet() registers formatter, debug_formatter, process, and question helpers.",
+      "sha256": "2d1931c3b518f682df2218b1d419c8a8979eea46316af19f59ccbbaffffc5bf4"
     }
   },
   "cases": [
@@ -401,21 +449,23 @@
       "id": "SYMFONY-S001",
       "title": "SerializerInterface::deserialize() and DenormalizerInterface::denormalize() resolve target class and array types",
       "sources": [
-        "psalm-serializer"
+        "psalm-serializer",
+        "symfony-serializer-interface"
       ],
       "fixture": "<?php function deser(\\Symfony\\Component\\Serializer\\SerializerInterface $s): \\SymfonyFixtureXml\\DomainEvent { return $s->deserialize('{}', \\SymfonyFixtureXml\\DomainEvent::class, 'json'); }",
       "semantics": "SerializerInterface::deserialize() and DenormalizerInterface::denormalize() hydrate an instance of $type (or an N-dimensional array-key-indexed array of $type for trailing [] suffixes such as Foo::class . '[]', preserving both integer and string keys).",
       "analyzer_expectation": "Resolve literal class names and trailing [] array dimensions to Type::namedObject() or nested Type::array(array-key, ...) when the target class exists in the codebase.",
-      "negative_control": "Calling a nonexistent method on a deserialized object or array element reports non-existent-method on DomainEvent; disabling extensions reverts to mixed-assignment and mixed-property-access.",
+      "negative_control": "Calling a nonexistent method on a deserialized object or array element reports non-existent-method on DomainEvent; disabling extensions reverts array notation to mixed-assignment and mixed-property-access; real Symfony Serializer runtime tests verify DomainEvent, DomainEvent[], associative keys, and DomainEvent[][].",
       "priority": "P0",
-      "versions": "Verified on Mago 1.60.2 / PHP 8.3 against Symfony 6.4 and 7.x.",
+      "versions": "Verified on Mago 1.60.2 / PHP 8.3 against real symfony/serializer on Symfony 6.4 and 7.4.",
       "coverage": [
         "tests/fixtures-xml/SymfonyComponents.php",
         "tests/fixtures-xml/Wave4ContractsNegative.php",
-        "tests/run.php"
+        "tests/run.php",
+        "tests/runtime.php"
       ],
       "status": "covered",
-      "derivation": "Extends Psalm's class-string deserialization spec to also support Symfony's 'Foo[]' and 'Foo[][]' array type notation."
+      "derivation": "Extends Psalm's class-string deserialization spec to also support Symfony's 'Foo[]' and 'Foo[][]' array type notation, backed by real symfony/serializer in require-dev."
     },
     {
       "id": "SYMFONY-C007",
@@ -437,6 +487,138 @@
       ],
       "status": "covered",
       "derivation": "Uses Mago SDK ClassInitializerProvider and Codebase::findMethods(withAnyAttribute) to discover #[Required] initializers."
+    },
+    {
+      "id": "SYMFONY-K002",
+      "title": "Console argument and option mode/default contracts and getArgument()/getOption() SDK boundary",
+      "sources": [
+        "symfony-input-argument",
+        "symfony-input-option",
+        "psalm-console-option"
+      ],
+      "fixture": "<?php use Symfony\\Component\\Console\\Command\\Command; use Symfony\\Component\\Console\\Input\\InputOption; final class BadCmd extends Command { protected function configure(): void { $this->addOption('flag', null, InputOption::VALUE_NONE, '', false); } }",
+      "semantics": "InputArgument and InputOption reject invalid mode and default combinations at runtime (REQUIRED with non-null default, VALUE_NONE with non-null default, VALUE_IS_ARRAY without VALUE_REQUIRED/VALUE_OPTIONAL, VALUE_NEGATABLE with value-accepting mode, and scalar defaults on IS_ARRAY). Per-Command InputInterface::getArgument()/getOption() return-type narrowing requires enclosing Command class context.",
+      "analyzer_expectation": "Share ConsoleCommandDefinition between ConsoleCommandArgumentsHook checks and report invalid-console-input-definition on all 6 runtime-throwing mode/default combinations. Keep InputInterface::getArgument()/getOption() return-type narrowing unimplemented until Mago SDK ReturnTypeProviderContext exposes enclosing class or file context.",
+      "negative_control": "InvalidConsoleDefinitionsCommand reports 6 invalid-console-input-definition diagnostics; Wave5HelperCommand reports 0; runtime tests prove all 6 invalid definitions throw Symfony Console exceptions.",
+      "priority": "P0",
+      "versions": "Verified on Mago 1.60.2 / PHP 8.3 against Symfony Console 6.4 and 7.4; per-Command return-type narrowing blocked by Mago 1.60.2 ReturnTypeProviderContext.",
+      "coverage": [
+        "tests/fixtures-xml/Wave5Contracts.php",
+        "tests/fixtures-xml/Wave5ContractsNegative.php",
+        "tests/run.php",
+        "tests/runtime.php"
+      ],
+      "status": "partial",
+      "derivation": "Shared ConsoleCommandDefinition model validates runtime-throwing mode/default rules; ReturnTypeProviderContext lacks enclosing class/file so return-type narrowing cannot be implemented soundly in Mago 1.60.2."
+    },
+    {
+      "id": "SYMFONY-U001",
+      "title": "Configurable Security getUser() narrows return type to configured UserInterface class",
+      "sources": [
+        "symfony-token-interface"
+      ],
+      "fixture": "<?php function userName(\\Symfony\\Bundle\\SecurityBundle\\Security $s): ?string { return $s->getUser()?->getDisplayName(); }",
+      "semantics": "AbstractController::getUser(), SecurityBundle\\Security::getUser(), Security\\Core\\Security::getUser(), and TokenInterface::getUser() return ?UserInterface by default, and return ?ConfiguredUser in applications configured with one user class via MAGO_SYMFONY_USER_CLASS.",
+      "analyzer_expectation": "When MAGO_SYMFONY_USER_CLASS names an existing class or interface implementing UserInterface, narrow getUser() to ConfiguredUser|null; leave zero-config and invalid/non-UserInterface configurations unchanged.",
+      "negative_control": "Unguarded dereference reports possible-method-access-on-null and unknown methods report non-existent-method; unconfigured and non-UserInterface configs preserve UserInterface|null and reject custom methods.",
+      "priority": "P0",
+      "versions": "Verified on Mago 1.60.2 / PHP 8.3 against Symfony Security Core and SecurityBundle 6.4 and 7.4.",
+      "coverage": [
+        "tests/fixtures-security/SecurityUserUsage.php",
+        "tests/fixtures-security/SecurityUserNegative.php",
+        "tests/mago-security.toml",
+        "tests/run.php",
+        "tests/runtime.php"
+      ],
+      "status": "covered",
+      "derivation": "Opt-in MethodReturnTypeProvider gated by MAGO_SYMFONY_USER_CLASS with codebase ancestry validation against UserInterface."
+    },
+    {
+      "id": "SYMFONY-C008",
+      "title": "Compiled container XML validates private service access and opt-in unknown service IDs",
+      "sources": [
+        "phpstan-private-service",
+        "psalm-container-xml",
+        "symfony-container"
+      ],
+      "fixture": "<?php function priv(\\Symfony\\Component\\DependencyInjection\\ContainerInterface $c): void { $c->get('xml.private.greeter'); }",
+      "semantics": "Compiled Symfony container XML marks public services and aliases with public=\"true\". Fetching a private service directly from ContainerInterface::get() or Container::get() throws ServiceNotFoundException outside ServiceLocator, ContainerBuilder, TestContainer, and TestCase subclasses. ContainerInterface::has() narrowing cannot be expressed in Mago 1.60.2 InvocationAssertions.",
+      "analyzer_expectation": "Report private-service-access on compiled XML containers for direct ContainerInterface/Container::get() calls on private services/aliases, and report unknown-service-id when MAGO_SYMFONY_STRICT_CONTAINER_SERVICES=1 is enabled with throwing invalidBehavior, while skipping ServiceLocator, ContainerBuilder, TestContainer, and PHPUnit TestCase subclasses.",
+      "negative_control": "ContainerXmlNegative reports 2 private-service-access errors (and 1 unknown-service-id in strict mode, skipping NULL_ON_INVALID_REFERENCE); ContainerXmlUsage (ServiceLocator, ContainerBuilder, AbstractController::$container, public alias) reports 0; symfony-demo corpus passes with 0 added issues.",
+      "priority": "P0",
+      "versions": "Verified on Mago 1.60.2 / PHP 8.3 against Symfony 6.4, 7.4, and symfony/demo App_KernelDevDebugContainer.xml.",
+      "coverage": [
+        "tests/container.xml",
+        "tests/fixtures-xml/ContainerXmlUsage.php",
+        "tests/fixtures-xml/ContainerXmlNegative.php",
+        "tests/run.php",
+        "tests/runtime.php"
+      ],
+      "status": "covered",
+      "derivation": "Extends ContainerXmlLoader and ServiceClassMap with service/alias visibility metadata and adds ContainerGetAccessHook; documents Mago 1.60.2 SDK boundary for has() narrowing."
+    },
+    {
+      "id": "SYMFONY-H003",
+      "title": "Request::getRequestFormat() and getPreferredFormat() narrow to string for non-null defaults",
+      "sources": [
+        "symfony-request"
+      ],
+      "fixture": "<?php function fmt(\\Symfony\\Component\\HttpFoundation\\Request $r): string { return $r->getRequestFormat(); }",
+      "semantics": "Request::getRequestFormat(?string $default = 'html') and getPreferredFormat(?string $default = 'html') return a non-null string whenever $default is omitted or a non-null string, and return ?string when $default is null or nullable.",
+      "analyzer_expectation": "Narrow return type to string when $default is omitted or non-null string, and fall back to Symfony's ?string when $default may be null.",
+      "negative_control": "Calling getRequestFormat(null) or getPreferredFormat(null) retains nullable-return-statement and invalid-return-statement; disabling extensions restores 4 possibly-null-operand errors; eliminates 6 null-argument/operand false positives on Drupal 11.4.13.",
+      "priority": "P1",
+      "versions": "Verified on Mago 1.60.2 / PHP 8.3 against Symfony HttpFoundation 6.4 and 7.4.",
+      "coverage": [
+        "tests/fixtures-xml/Wave5Contracts.php",
+        "tests/fixtures-xml/Wave5ContractsNegative.php",
+        "tests/run.php",
+        "tests/runtime.php"
+      ],
+      "status": "covered",
+      "derivation": "Empirically proven Mago 1.60.2 gap on Symfony 6.4 and 7.4; SessionInterface::get() and InputBag::get() were rejected as unsound because stored null or arbitrary values bypass defaults at runtime."
+    },
+    {
+      "id": "SYMFONY-H004",
+      "title": "ResponseHeaderBag::getCookies() returns list<Cookie> or nested Cookie map by format",
+      "sources": [
+        "symfony-response-header-bag"
+      ],
+      "fixture": "<?php function nestedCookies(\\Symfony\\Component\\HttpFoundation\\ResponseHeaderBag $h): void { foreach ($h->getCookies(\\Symfony\\Component\\HttpFoundation\\ResponseHeaderBag::COOKIES_ARRAY) as $paths) { foreach ($paths as $cookies) { foreach ($cookies as $c) { $c->getName(); } } } }",
+      "semantics": "ResponseHeaderBag::getCookies($format = self::COOKIES_FLAT) returns list<Cookie> for COOKIES_FLAT ('flat') and array<string, array<string, array<string, Cookie>>> for COOKIES_ARRAY ('array'), whereas Symfony's docblock declares only Cookie[].",
+      "analyzer_expectation": "Return list<Cookie> when $format is omitted or 'flat' and nested domain/path/name Cookie arrays when $format is 'array'.",
+      "negative_control": "Calling missing methods on flat or nested Cookie elements reports non-existent-method; disabling extensions triggers non-iterable-object-iteration and invalid-iterator on COOKIES_ARRAY loops.",
+      "priority": "P1",
+      "versions": "Verified on Mago 1.60.2 / PHP 8.3 against Symfony HttpFoundation 6.4 and 7.4.",
+      "coverage": [
+        "tests/fixtures-xml/Wave5Contracts.php",
+        "tests/fixtures-xml/Wave5ContractsNegative.php",
+        "tests/run.php",
+        "tests/runtime.php"
+      ],
+      "status": "covered",
+      "derivation": "Clean-room MethodReturnTypeProvider fixing Symfony's inaccurate @return Cookie[] docblock for COOKIES_ARRAY."
+    },
+    {
+      "id": "SYMFONY-K003",
+      "title": "HelperSet::get() and Command::getHelper() narrow built-in Symfony Console helpers",
+      "sources": [
+        "symfony-console-application"
+      ],
+      "fixture": "<?php function helper(\\Symfony\\Component\\Console\\Helper\\HelperSet $h): \\Symfony\\Component\\Console\\Helper\\QuestionHelper { return $h->get('question'); }",
+      "semantics": "Application::getDefaultHelperSet() registers formatter (FormatterHelper), debug_formatter (DebugFormatterHelper), process (ProcessHelper), and question (QuestionHelper).",
+      "analyzer_expectation": "Narrow literal calls to HelperSet::get() and Command::getHelper() for the 4 built-in helper names when the target helper class exists in the codebase.",
+      "negative_control": "Calling an unknown method on $helpers->get('question') reports non-existent-method on QuestionHelper; disabling extensions restores 4 less-specific-argument and 1 less-specific-return-statement diagnostics.",
+      "priority": "P1",
+      "versions": "Verified on Mago 1.60.2 / PHP 8.3 against Symfony Console 6.4 and 7.4.",
+      "coverage": [
+        "tests/fixtures-xml/Wave5Contracts.php",
+        "tests/fixtures-xml/Wave5ContractsNegative.php",
+        "tests/run.php",
+        "tests/runtime.php"
+      ],
+      "status": "covered",
+      "derivation": "Clean-room MethodReturnTypeProvider matching Symfony Console Application::getDefaultHelperSet()."
     }
   ]
 }

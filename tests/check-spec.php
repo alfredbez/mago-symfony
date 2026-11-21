@@ -44,7 +44,7 @@ foreach ($catalog['cases'] as $case) {
         continue;
     }
     $id = $case['id'] ?? '';
-    if (!is_string($id) || preg_match('/^SYMFONY-[CTKHSF][0-9]{3}$/', $id) !== 1 || isset($ids[$id])) {
+    if (!is_string($id) || preg_match('/^SYMFONY-[CTKHSFU][0-9]{3}$/', $id) !== 1 || isset($ids[$id])) {
         $failures[] = 'Invalid or duplicate case ID';
         continue;
     }
@@ -79,7 +79,11 @@ foreach ($catalog['cases'] as $case) {
                 $failures[] = "{$id}: missing test file";
                 continue;
             }
-            if (str_starts_with($path, 'tests/fixtures/') || str_starts_with($path, 'tests/fixtures-xml/')) {
+            if (
+                str_starts_with($path, 'tests/fixtures/')
+                || str_starts_with($path, 'tests/fixtures-xml/')
+                || str_starts_with($path, 'tests/fixtures-security/')
+            ) {
                 $negative = $negative || str_contains($path, 'Negative');
                 $positive = $positive || !str_contains($path, 'Negative');
             }
