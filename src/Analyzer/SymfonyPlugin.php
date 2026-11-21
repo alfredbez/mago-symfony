@@ -12,6 +12,7 @@ use AlfredBez\MagoSymfony\Analyzer\Providers\HeaderBagGetReturnTypeProvider;
 use AlfredBez\MagoSymfony\Analyzer\Providers\ParameterReturnTypeProvider;
 use AlfredBez\MagoSymfony\Analyzer\Providers\RequiredInitializerProvider;
 use AlfredBez\MagoSymfony\Analyzer\Providers\RootNodeReturnTypeProvider;
+use AlfredBez\MagoSymfony\Analyzer\Providers\SecurityUserReturnTypeProvider;
 use AlfredBez\MagoSymfony\Analyzer\Providers\SerializerReturnTypeProvider;
 use AlfredBez\MagoSymfony\Analyzer\Providers\ServiceClassMap;
 use AlfredBez\MagoSymfony\Analyzer\Providers\TreeBuilderReturnIssueFilter;
@@ -45,6 +46,10 @@ final class SymfonyPlugin implements Plugin
         $registry->registerMethodReturnTypeProvider(new HeaderBagGetReturnTypeProvider());
         $registry->registerMethodReturnTypeProvider(new FormGetErrorsReturnTypeProvider());
         $registry->registerMethodReturnTypeProvider(new SerializerReturnTypeProvider());
+        $userClass = SecurityUserReturnTypeProvider::configuredUserClass();
+        if ($userClass !== null) {
+            $registry->registerMethodReturnTypeProvider(new SecurityUserReturnTypeProvider($userClass));
+        }
         $registry->registerClassInitializerProvider(new RequiredInitializerProvider());
         $registry->registerMethodCallAnalysisHook(new TreeBuilderRootNodeHook());
         $registry->registerClassLikeAnalysisHook(new ConsoleCommandArgumentsHook());

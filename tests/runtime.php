@@ -173,4 +173,17 @@ check(
     'Denormalizer::denormalize hydrates nested DomainEvent[][] preserving associative keys',
 );
 
+require_once __DIR__ . '/fixtures-security/SecurityUserUsage.php';
+$appUser = new \SymfonyFixtureSecurity\AppUser('Ada');
+$token = new \Symfony\Component\Security\Core\Authentication\Token\UsernamePasswordToken($appUser, 'main', ['ROLE_USER']);
+check($token->getUser() === $appUser, 'UsernamePasswordToken::getUser returns the configured UserInterface implementation');
+$tokenStorage = new \Symfony\Component\Security\Core\Authentication\Token\Storage\TokenStorage();
+$tokenStorage->setToken($token);
+$securityContainer = new Container();
+$securityContainer->set('security.token_storage', $tokenStorage);
+$securityHelper = new \Symfony\Bundle\SecurityBundle\Security($securityContainer);
+check($securityHelper->getUser() === $appUser, 'SecurityBundle Security::getUser returns the configured user from token storage');
+$tokenStorage->setToken(null);
+check($securityHelper->getUser() === null, 'SecurityBundle Security::getUser returns null when unauthenticated');
+
 fwrite(STDOUT, "Symfony runtime contracts PASS\n\n");

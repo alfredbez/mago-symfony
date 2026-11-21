@@ -573,6 +573,42 @@ $failures += assertMessageCount('xml with extension', $xmlWith, 'tests/fixtures-
 $failures += assertMessageCount('xml with extension', $xmlWith, 'tests/fixtures-xml/Wave4ContractsNegative.php', 'non-existent-method', 'anotherMissingMethod', 1);
 $failures += assertMessageCount('xml with extension', $xmlWith, 'tests/fixtures-xml/Wave4ContractsNegative.php', 'missing-constructor', 'UninitializedServiceNegative', 1);
 
+putenv('MAGO_SYMFONY_CONTAINER_XML');
+putenv('MAGO_SYMFONY_USER_CLASS=SymfonyFixtureSecurity\\AppUser');
+$secConfigured = analyze(false, 'tests/mago-security.toml');
+putenv('MAGO_SYMFONY_USER_CLASS=SymfonyFixtureSecurity\\NotAUser');
+$secInvalidClass = analyze(false, 'tests/mago-security.toml');
+putenv('MAGO_SYMFONY_USER_CLASS');
+$secUnconfigured = analyze(false, 'tests/mago-security.toml');
+$secNoExt = analyze(true, 'tests/mago-security.toml');
+
+$failures += assertHistograms('security configured', $secConfigured, [
+    'tests/fixtures-security/SecurityUserUsage.php' => [
+        'non-existent-method' => 1,
+        'possible-method-access-on-null' => 1,
+    ],
+]);
+$failures += assertMessageCount('security configured', $secConfigured, 'tests/fixtures-security/SecurityUserUsage.php', 'non-existent-method', 'nonExistentMethodOnAppUser', 1);
+$failures += assertMessageCount('security configured', $secConfigured, 'tests/fixtures-security/SecurityUserUsage.php', 'non-existent-method', 'getDisplayName', 0);
+
+$unconfiguredSecurityExpected = [
+    'tests/fixtures-security/SecurityUserUsage.php' => [
+        'less-specific-nested-argument-type' => 1,
+        'non-existent-method' => 5,
+        'possible-method-access-on-null' => 1,
+    ],
+];
+$failures += assertHistograms('security invalid user class', $secInvalidClass, $unconfiguredSecurityExpected);
+$failures += assertHistograms('security unconfigured', $secUnconfigured, $unconfiguredSecurityExpected);
+$failures += assertHistograms('security --no-extensions', $secNoExt, [
+    'tests/fixtures-security/SecurityUserUsage.php' => [
+        'less-specific-nested-argument-type' => 1,
+        'missing-constructor' => $isSymfony7 ? 1 : 0,
+        'non-existent-method' => 5,
+        'possible-method-access-on-null' => 1,
+    ],
+]);
+
 if ($failures > 0) {
     fwrite(STDERR, "\n{$failures} assertion(s) failed\n");
     exit(1);
