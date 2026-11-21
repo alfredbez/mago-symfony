@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8"?>
+<container xmlns="http://symfony.com/schema/dic/services" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://symfony.com/schema/dic/services https://symfony.com/schema/dic/services/services-1.0.xsd">
+  <parameters>
+    <parameter key="app.name">shop-app</parameter>
+    <parameter key="app.debug">true</parameter>
+    <parameter key="app.retries">3</parameter>
+    <parameter key="app.ratio">1.5</parameter>
+    <parameter key="app.nullable">null</parameter>
+    <parameter key="app.list" type="collection">
+      <parameter>alpha</parameter>
+      <parameter>beta</parameter>
+    </parameter>
+    <parameter key="app.map" type="collection">
+      <parameter key="host">localhost</parameter>
+      <parameter key="port">3306</parameter>
+    </parameter>
+    <parameter key="app.nested" type="collection">
+      <parameter key="items" type="collection">
+        <parameter>10</parameter>
+        <parameter>20</parameter>
+      </parameter>
+      <parameter key="meta" type="collection">
+        <parameter key="ok">false</parameter>
+      </parameter>
+    </parameter>
+    <parameter key="app.binary" type="binary">AAH/</parameter>
+    <parameter key="app.env_str">%env(APP_ENV)%</parameter>
+    <parameter key="app.env_int">%env(int:APP_PORT)%</parameter>
+    <parameter key="app.numeric_str" type="string">42</parameter>
+    <parameter key="app.api_version" type="constant">SymfonyFixture\FixtureConstants::API_VERSION</parameter>
+  </parameters>
+  <services>
+    <service id="service_container" class="Symfony\Component\DependencyInjection\ContainerInterface" public="true" synthetic="true"/>
+    <service id="xml.public.greeter" class="SymfonyFixture\ConcreteGreeter" public="true"/>
+    <service id="xml.private.greeter" class="SymfonyFixture\ConcreteGreeter"/>
+    <service id="xml.synthetic.mailer" class="SymfonyFixture\Mailer" public="true" synthetic="true"/>
+    <service id="xml.factory.class" public="true">
+      <factory class="SymfonyFixture\GreeterFactory" method="create"/>
+    </service>
+    <service id="xml.factory.subtype" class="SymfonyFixture\Greeter" public="true">
+      <factory class="SymfonyFixture\GreeterFactory" method="createConcrete"/>
+    </service>
+    <service id="xml.factory.provider" class="SymfonyFixture\MailerFactoryService"/>
+    <service id="xml.factory.service" public="true">
+      <factory service="xml.factory.provider" method="buildMailer"/>
+    </service>
+    <service id="xml.alias.step" alias="xml.private.greeter"/>
+    <service id="xml.alias.chain" alias="xml.alias.step"/>
+    <service id="xml.cycle.a" alias="xml.cycle.b"/>
+    <service id="xml.cycle.b" alias="xml.cycle.a"/>
+  </services>
+</container>

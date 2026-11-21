@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace AlfredBez\MagoSymfony\Analyzer;
 
 use AlfredBez\MagoSymfony\Analyzer\Providers\ConfigEndReturnTypeProvider;
+use AlfredBez\MagoSymfony\Analyzer\Providers\ConsoleCommandArgumentsHook;
 use AlfredBez\MagoSymfony\Analyzer\Providers\ContainerGetReturnTypeProvider;
+use AlfredBez\MagoSymfony\Analyzer\Providers\ParameterReturnTypeProvider;
 use AlfredBez\MagoSymfony\Analyzer\Providers\RootNodeReturnTypeProvider;
 use AlfredBez\MagoSymfony\Analyzer\Providers\ServiceClassMap;
 use AlfredBez\MagoSymfony\Analyzer\Providers\TreeBuilderReturnIssueFilter;
@@ -28,11 +30,14 @@ final class SymfonyPlugin implements Plugin
 
     public function register(PluginRegistry $registry): void
     {
+        $container = ServiceClassMap::fromEnvironment();
         $registry->enableProviderMemoization();
-        $registry->registerMethodReturnTypeProvider(new ContainerGetReturnTypeProvider(ServiceClassMap::fromEnvironment()));
+        $registry->registerMethodReturnTypeProvider(new ContainerGetReturnTypeProvider($container));
+        $registry->registerMethodReturnTypeProvider(new ParameterReturnTypeProvider($container));
         $registry->registerMethodReturnTypeProvider(new RootNodeReturnTypeProvider());
         $registry->registerMethodReturnTypeProvider(new ConfigEndReturnTypeProvider());
         $registry->registerMethodCallAnalysisHook(new TreeBuilderRootNodeHook());
+        $registry->registerClassLikeAnalysisHook(new ConsoleCommandArgumentsHook());
         $registry->registerIssueFilterHook(new TreeBuilderReturnIssueFilter());
     }
 }

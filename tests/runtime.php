@@ -72,4 +72,29 @@ foreach (['nestedTreeAssignment', 'nestedRootAssignment'] as $method) {
     }
 }
 
+$xmlBuilder = new ContainerBuilder();
+$xmlBuilder->setParameter('app.name', 'shop-app');
+$xmlBuilder->setParameter('app.debug', true);
+$xmlBuilder->setParameter('app.retries', 3);
+$xmlBuilder->setParameter('app.ratio', 1.5);
+$xmlBuilder->setParameter('app.list', ['alpha', 'beta']);
+$xmlBuilder->setParameter('app.map', ['host' => 'localhost', 'port' => 3306]);
+$xmlBuilder->register('xml.public.greeter', ConcreteGreeter::class)->setPublic(true);
+$xmlBuilder->register('xml.private.greeter', ConcreteGreeter::class)->setPublic(false);
+$xmlBuilder->setAlias('xml.alias.step', 'xml.private.greeter');
+$xmlBuilder->setAlias('xml.alias.chain', 'xml.alias.step');
+$xmlBuilder->register('xml.factory.class', Greeter::class)
+    ->setFactory([\SymfonyFixture\GreeterFactory::class, 'create'])
+    ->setPublic(true);
+$dumper = new \Symfony\Component\DependencyInjection\Dumper\XmlDumper($xmlBuilder);
+$dumpedXml = $dumper->dump();
+$loaded = \AlfredBez\MagoSymfony\Analyzer\Providers\ServiceClassMap::fromXmlString($dumpedXml);
+check($loaded->classFor('xml.public.greeter') === ConcreteGreeter::class, 'XmlDumper public service class resolved');
+check($loaded->classFor('xml.private.greeter') === ConcreteGreeter::class, 'XmlDumper private service class resolved');
+check($loaded->classFor('xml.alias.chain') === ConcreteGreeter::class, 'XmlDumper chained alias resolved');
+check($loaded->factoryFor('xml.factory.class') === ['kind' => 'method', 'class' => \SymfonyFixture\GreeterFactory::class, 'method' => 'create'], 'XmlDumper factory resolved');
+check($loaded->parameterFor('app.name') === ['kind' => 'string', 'value' => 'shop-app'], 'XmlDumper string parameter resolved');
+check($loaded->parameterFor('app.retries') === ['kind' => 'int', 'value' => 3], 'XmlDumper int parameter resolved');
+check($loaded->parameterFor('app.debug') === ['kind' => 'bool', 'value' => true], 'XmlDumper bool parameter resolved');
+
 fwrite(STDOUT, "Symfony runtime contracts PASS\n\n");

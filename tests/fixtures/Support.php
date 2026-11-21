@@ -26,3 +26,29 @@ final class ConcreteGreeter implements Greeter
         return 'concrete';
     }
 }
+
+final class GreeterFactory
+{
+    public static function create(): ConcreteGreeter
+    {
+        return new ConcreteGreeter();
+    }
+
+    public static function createConcrete(): ConcreteGreeter
+    {
+        return new ConcreteGreeter();
+    }
+}
+
+final class MailerFactoryService
+{
+    public function buildMailer(): Mailer
+    {
+        return new Mailer();
+    }
+}
+
+final class FixtureConstants
+{
+    public const API_VERSION = 2;
+}

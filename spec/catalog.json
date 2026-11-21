@@ -227,6 +227,72 @@
       ],
       "status": "covered",
       "derivation": "Local hook audit regression extending PHPStan non-array-root cases. This does not claim control-flow or by-reference capture analysis."
+    },
+    {
+      "id": "SYMFONY-C005",
+      "title": "Compiled container XML resolves public, private, aliased, and factory services",
+      "sources": [
+        "psalm-container-xml",
+        "symfony-container"
+      ],
+      "fixture": "<?php function xmlSvc(\\Psr\\Container\\ContainerInterface $c): void { $c->get('xml.factory.class')->implementationOnly(); }",
+      "semantics": "Compiled Symfony container XML declares public and private services, multi-hop aliases, and class/service factories whose return types can refine the service class.",
+      "analyzer_expectation": "Parse compiled XML dumps via MAGO_SYMFONY_CONTAINER_XML (or var/cache auto-discovery), resolve chained aliases with cycle protection, and refine factory services through codebase return types.",
+      "negative_control": "Wrong methods on aliased or factory-resolved services report non-existent-method; cyclic aliases safely degrade to mixed; runtime XmlDumper round-trip matches.",
+      "priority": "P0",
+      "versions": "Verified on Mago 1.60.2 / PHP 8.3 against Symfony 6.4 and 7.x container XML plus symfony/demo App_KernelDevDebugContainer.xml (1487 services).",
+      "coverage": [
+        "tests/container.xml",
+        "tests/fixtures-xml/ContainerXmlUsage.php",
+        "tests/fixtures-xml/ContainerXmlNegative.php",
+        "tests/run.php",
+        "tests/runtime.php"
+      ],
+      "status": "covered",
+      "derivation": "Replaces the prior JSON-only limitation with real Symfony XmlDumper container parsing."
+    },
+    {
+      "id": "SYMFONY-C006",
+      "title": "Container and ParameterBag parameter lookups resolve typed XML parameter values",
+      "sources": [
+        "psalm-container-xml",
+        "symfony-container"
+      ],
+      "fixture": "<?php function param(\\Symfony\\Component\\DependencyInjection\\ParameterBag\\ParameterBagInterface $bag): int { return strlen($bag->get('app.name')); }",
+      "semantics": "Compiled container XML carries scalar, collection, constant, binary, and typed %env(...)% parameters used via ParameterBagInterface::get(), ContainerInterface::getParameter(), and AbstractController::getParameter().",
+      "analyzer_expectation": "Resolve literal parameter keys to precise scalar, list, keyed-array, constant, or env-processor types while preserving Symfony's declared union for unknown keys.",
+      "negative_control": "Passing int parameter to strlen(), string parameter to intdiv(), or null parameter to strlen() reports invalid-argument/null-argument; unknown keys keep possible null/union diagnostics.",
+      "priority": "P0",
+      "versions": "Verified on Mago 1.60.2 / PHP 8.3 against Symfony 6.4 and 7.x.",
+      "coverage": [
+        "tests/container.xml",
+        "tests/fixtures-xml/ContainerXmlUsage.php",
+        "tests/fixtures-xml/ContainerXmlNegative.php",
+        "tests/run.php",
+        "tests/runtime.php"
+      ],
+      "status": "covered",
+      "derivation": "Extends container XML metadata to parameter resolution across Container, ParameterBag, and AbstractController."
+    },
+    {
+      "id": "SYMFONY-K001",
+      "title": "Console commands validate literal getArgument and getOption names against configure()",
+      "sources": [
+        "symfony-container"
+      ],
+      "fixture": "<?php use Symfony\\Component\\Console\\Command\\Command; use Symfony\\Component\\Console\\Input\\InputArgument; use Symfony\\Component\\Console\\Input\\InputInterface; use Symfony\\Component\\Console\\Output\\OutputInterface; final class Cmd extends Command { protected function configure(): void { $this->addArgument('username', InputArgument::REQUIRED); } protected function execute(InputInterface $in, OutputInterface $out): int { return $in->getArgument('username') !== null ? 0 : 1; } }",
+      "semantics": "Commands declaring static arguments and options in configure() without calling parent::configure() or setDefinition() fail at runtime when execute() requests an undeclared name.",
+      "analyzer_expectation": "Report unknown-console-argument and unknown-console-option for undeclared literal names on InputInterface receivers, while accepting standard Application options and skipping inherited or dynamic definitions.",
+      "negative_control": "TypoCommand reports both unknown-console-argument and unknown-console-option; ValidatedCommand and InheritedCommand produce zero issues; disabling extensions removes both diagnostics.",
+      "priority": "P1",
+      "versions": "Verified on Mago 1.60.2 / PHP 8.3 against Symfony Console 6.4 and 7.x.",
+      "coverage": [
+        "tests/fixtures-xml/SymfonyComponents.php",
+        "tests/fixtures-xml/ConsoleCommandNegative.php",
+        "tests/run.php"
+      ],
+      "status": "covered",
+      "derivation": "Mago SDK ReturnTypeProviderContext does not expose enclosing Command class, so static validation runs via ClassLikeAnalysisHook on Command descendants."
     }
   ]
 }

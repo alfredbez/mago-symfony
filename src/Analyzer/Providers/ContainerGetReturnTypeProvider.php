@@ -8,10 +8,14 @@ use Mago\Sdk\Analyzer\MethodReturnTypeProvider;
 use Mago\Sdk\Analyzer\MethodTarget;
 use Mago\Sdk\Analyzer\ReturnTypeProviderContext;
 use Mago\Sdk\Analyzer\Type;
+use Mago\Sdk\Analyzer\Type\AnyObjectType;
 use Mago\Sdk\Analyzer\Type\IntegerType;
 use Mago\Sdk\Analyzer\Type\IntegerTypeKind;
+use Mago\Sdk\Analyzer\Type\MixedType;
 use Mago\Sdk\Analyzer\Type\NamedObjectType;
 use Mago\Sdk\Analyzer\Type\ScalarType;
+use Mago\Sdk\Analyzer\Type\SimpleAtomicType;
+use Mago\Sdk\Analyzer\Type\SimpleAtomicTypeKind;
 
 /**
  * ContainerInterface::get() returns ?object, so every call loses its type.
@@ -76,56 +80,102 @@ final class ContainerGetReturnTypeProvider implements MethodReturnTypeProvider
             return null;
         }
 
-        $serviceClass = $this->resolveServiceClass($id, $context);
-        if ($serviceClass === null) {
+        $serviceType = $this->resolveServiceType($id, $context);
+        if ($serviceType === null) {
             return null;
         }
 
         $invalidBehavior = $context->invocation->getArgument(1, 'invalidBehavior');
         if ($invalidBehavior === null) {
-            return $this->serviceType($serviceClass);
+            return $serviceType;
         }
 
         $flagType = $invalidBehavior->type;
         if ($flagType === null) {
-            return $this->nullableServiceType($serviceClass);
+            return $this->makeNullable($id, $serviceType);
         }
 
         $classification = self::classifyBehaviorFlag($flagType);
         if ($classification === self::FLAG_ALWAYS_THROWS) {
-            return $this->serviceType($serviceClass);
+            return $serviceType;
         }
 
         if ($classification === self::FLAG_NEVER_THROWS) {
-            return $this->nullableServiceType($serviceClass);
+            return $this->makeNullable($id, $serviceType);
         }
 
         $isBuilder = $this->isContainerBuilder($context);
         if ($classification === self::FLAG_BUILDER_ONLY) {
-            return $isBuilder ? $this->serviceType($serviceClass) : $this->nullableServiceType($serviceClass);
+            return $isBuilder ? $serviceType : $this->makeNullable($id, $serviceType);
         }
 
         $throwing = $isBuilder ? $this->throwingBuilderType() : $this->throwingDefaultType();
         if ($context->types->isContainedBy($flagType, $throwing)) {
-            return $this->serviceType($serviceClass);
+            return $serviceType;
         }
 
         // Container returns null for flag 0, despite ContainerInterface's conditional PHPDoc.
-        return $this->nullableServiceType($serviceClass);
+        return $this->makeNullable($id, $serviceType);
     }
 
-    private function resolveServiceClass(string $id, ReturnTypeProviderContext $context): ?string
+    private function resolveServiceType(string $id, ReturnTypeProviderContext $context): ?Type
     {
-        $mapped = $this->services->classFor($id);
-        if ($mapped !== null) {
-            return $context->codebase->classOrInterfaceExists($mapped) ? $mapped : null;
+        $mappedClass = $this->services->classFor($id);
+        $factory = $this->services->factoryFor($id);
+
+        if ($factory !== null) {
+            $factoryType = $this->resolveFactoryReturnType($factory, $context);
+            if ($factoryType !== null) {
+                return $factoryType;
+            }
+        }
+
+        if ($mappedClass !== null) {
+            return $context->codebase->classOrInterfaceExists($mappedClass)
+                ? $this->serviceType($mappedClass)
+                : null;
         }
 
         if ($id === '' || str_contains($id, '.')) {
             return null;
         }
 
-        return $context->codebase->classOrInterfaceExists($id) ? $id : null;
+        return $context->codebase->classOrInterfaceExists($id) ? $this->serviceType($id) : null;
+    }
+
+    /**
+     * @param array{kind: 'method', class: string, method: string}|array{kind: 'function', function: string} $factory
+     */
+    private function resolveFactoryReturnType(array $factory, ReturnTypeProviderContext $context): ?Type
+    {
+        $meta = $factory['kind'] === 'method'
+            ? $context->codebase->getMethod($factory['class'], $factory['method'])
+            : $context->codebase->getFunction($factory['function']);
+
+        $returnType = $meta?->returnType?->type ?? $meta?->declaredReturnType?->type;
+        if ($returnType === null) {
+            return null;
+        }
+
+        if (self::isUnusableFactoryReturn($returnType)) {
+            return null;
+        }
+
+        return $returnType;
+    }
+
+    private static function isUnusableFactoryReturn(Type $type): bool
+    {
+        foreach ($type->atomicTypes as $atomic) {
+            if ($atomic instanceof MixedType || $atomic instanceof AnyObjectType) {
+                return true;
+            }
+            if ($atomic instanceof SimpleAtomicType && ($atomic->kind === SimpleAtomicTypeKind::Void || $atomic->kind === SimpleAtomicTypeKind::Never)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private function serviceType(string $serviceClass): Type
@@ -133,12 +183,24 @@ final class ContainerGetReturnTypeProvider implements MethodReturnTypeProvider
         return $this->serviceTypes[$serviceClass] ??= Type::namedObject($serviceClass);
     }
 
-    private function nullableServiceType(string $serviceClass): Type
+    private function makeNullable(string $cacheKey, Type $serviceType): Type
     {
-        return $this->nullableServiceTypes[$serviceClass] ??= Type::union(
-            $this->serviceType($serviceClass),
-            $this->nullType ??= Type::null(),
-        );
+        if (count($serviceType->atomicTypes) === 1 && $serviceType->atomicTypes[0] instanceof NamedObjectType && $serviceType->atomicTypes[0]->parameters === null) {
+            $class = $serviceType->atomicTypes[0]->name;
+
+            return $this->nullableServiceTypes[$class] ??= Type::union(
+                $this->serviceType($class),
+                $this->nullType ??= Type::null(),
+            );
+        }
+
+        foreach ($serviceType->atomicTypes as $atomic) {
+            if ($atomic instanceof SimpleAtomicType && $atomic->kind === SimpleAtomicTypeKind::Null) {
+                return $serviceType;
+            }
+        }
+
+        return Type::union($serviceType, $this->nullType ??= Type::null());
     }
 
     private function isContainerBuilder(ReturnTypeProviderContext $context): bool

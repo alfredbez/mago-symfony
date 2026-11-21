@@ -425,6 +425,61 @@ foreach ([false => $with, true => $without] as $disabled => $issues) {
     $failures += assertSites($disabled ? '--no-extensions' : 'with extension', $issues, $sites[$disabled]);
 }
 
+putenv('MAGO_SYMFONY_CONTAINER_MAP');
+putenv('MAGO_SYMFONY_CONTAINER_XML=' . __DIR__ . '/container.xml');
+$xmlWith = analyze(false, 'tests/mago-xml.toml');
+$xmlWithout = analyze(true, 'tests/mago-xml.toml');
+
+$xmlExpected = [
+    false => [
+        'tests/fixtures-xml/ContainerXmlUsage.php' => [],
+        'tests/fixtures-xml/SymfonyComponents.php' => [],
+        'tests/fixtures-xml/ContainerXmlNegative.php' => [
+            'invalid-argument' => 2,
+            'mixed-method-access' => 1,
+            'non-existent-method' => 3,
+            'null-argument' => 1,
+            'possibly-invalid-argument' => 1,
+            'possibly-null-argument' => 1,
+        ],
+        'tests/fixtures-xml/ConsoleCommandNegative.php' => [
+            'alfredbez/symfony/unknown-console-argument' => 1,
+            'alfredbez/symfony/unknown-console-option' => 1,
+        ],
+    ],
+    true => [
+        'tests/fixtures-xml/ContainerXmlUsage.php' => [
+            'ambiguous-object-method-access' => 2,
+            'invalid-array-access' => 5,
+            'less-specific-return-statement' => 1,
+            'mixed-argument' => 4,
+            'mixed-array-access' => 2,
+            'mixed-assignment' => 1,
+            'mixed-method-access' => 5,
+            'mixed-operand' => 12,
+            'mixed-return-statement' => 1,
+            'possible-method-access-on-null' => 1,
+            'possibly-invalid-argument' => 7,
+            'possibly-invalid-array-access' => 5,
+            'possibly-null-argument' => 6,
+            'possibly-null-array-access' => 5,
+            'possibly-null-operand' => 3,
+        ],
+        'tests/fixtures-xml/SymfonyComponents.php' => [],
+        'tests/fixtures-xml/ContainerXmlNegative.php' => [
+            'mixed-method-access' => 4,
+            'possibly-invalid-argument' => 4,
+            'possibly-null-argument' => 4,
+        ],
+        'tests/fixtures-xml/ConsoleCommandNegative.php' => [],
+    ],
+];
+foreach ([false => 'xml with extension', true => 'xml --no-extensions'] as $disabled => $label) {
+    $failures += assertHistograms($label, $disabled ? $xmlWithout : $xmlWith, $xmlExpected[$disabled]);
+}
+$failures += assertMessageCount('xml with extension', $xmlWith, 'tests/fixtures-xml/ConsoleCommandNegative.php', 'alfredbez/symfony/unknown-console-argument', 'user_name', 1);
+$failures += assertMessageCount('xml with extension', $xmlWith, 'tests/fixtures-xml/ConsoleCommandNegative.php', 'alfredbez/symfony/unknown-console-option', 'dryrun', 1);
+
 if ($failures > 0) {
     fwrite(STDERR, "\n{$failures} assertion(s) failed\n");
     exit(1);
@@ -458,9 +513,15 @@ function run(array $command): array
 }
 
 /** @return list<array{level: string, code: string, file: string, line: int, message: string}> */
-function analyze(bool $noExtensions): array
+function analyze(bool $noExtensions, ?string $config = null): array
 {
-    $command = [PHP_BINARY, 'vendor/bin/mago', 'analyze', '--reporting-format=json'];
+    $command = [PHP_BINARY, 'vendor/bin/mago'];
+    if ($config !== null) {
+        $command[] = '--config';
+        $command[] = $config;
+    }
+    $command[] = 'analyze';
+    $command[] = '--reporting-format=json';
     if ($noExtensions) {
         $command[] = '--no-extensions';
     }

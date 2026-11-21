@@ -1,0 +1,31 @@
+version = "1"
+php-version = "8.3"
+
+[source]
+paths = ["tests/fixtures-xml", "tests/fixtures/Support.php"]
+includes = [
+    "vendor/symfony/config",
+    "vendor/symfony/console",
+    "vendor/symfony/dependency-injection",
+    "vendor/symfony/event-dispatcher",
+    "vendor/symfony/event-dispatcher-contracts",
+    "vendor/symfony/form",
+    "vendor/symfony/framework-bundle",
+    "vendor/symfony/http-foundation",
+    "vendor/symfony/http-kernel",
+    "vendor/symfony/messenger",
+    "vendor/symfony/routing",
+    "vendor/symfony/security-core",
+    "vendor/symfony/service-contracts",
+    "vendor/psr/container",
+    "vendor/psr/event-dispatcher",
+]
+
+[analyzer]
+find-unused-definitions = false
+find-unused-expressions = false
+check-property-initialization = false
+
+[extension-hosts.symfony]
+command = ["php", "worker.php"]
+workers = 1
