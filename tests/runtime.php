@@ -229,4 +229,31 @@ foreach ([
     }
 }
 
+require_once __DIR__ . '/fixtures-xml/Wave6ValidatorInitializer.php';
+$validatorInstance = new \SymfonyFixtureXml\Wave6ConstraintValidator();
+$validatorContext = new \Symfony\Component\Validator\Context\ExecutionContext(
+    \Symfony\Component\Validator\Validation::createValidator(),
+    null,
+    new class implements \Symfony\Contracts\Translation\TranslatorInterface {
+        public function trans(string $id, array $parameters = [], ?string $domain = null, ?string $locale = null): string
+        {
+            return $id;
+        }
+
+        public function getLocale(): string
+        {
+            return 'en';
+        }
+    },
+);
+$validatorInstance->initialize($validatorContext);
+$validatorInstance->validate('', new \SymfonyFixtureXml\Wave6NonBlankConstraint());
+check(count($validatorContext->getViolations()) === 1, 'ConstraintValidator::initialize wires ExecutionContextInterface before validate()');
+
+$inputHelper = new \SymfonyFixtureXml\Wave6InputAwareHelper();
+$arrayInput = new \Symfony\Component\Console\Input\ArrayInput([]);
+$arrayInput->setInteractive(false);
+$inputHelper->setInput($arrayInput);
+check($inputHelper->isInteractiveInput() === false, 'InputAwareHelper::setInput wires InputInterface before use');
+
 fwrite(STDOUT, "Symfony runtime contracts PASS\n\n");

@@ -9,13 +9,20 @@ use Mago\Sdk\Analyzer\ClassInitializerProviderContext;
 use Mago\Sdk\Analyzer\ClassTarget;
 
 /**
- * Recognizes Symfony AbstractController::setContainer() and methods marked with
- * #[Symfony\Contracts\Service\Attribute\Required] as class initializers.
+ * Recognizes Symfony lifecycle initializers (AbstractController::setContainer,
+ * ConstraintValidator::initialize, InputAwareHelper::setInput) and methods
+ * marked with #[Symfony\Contracts\Service\Attribute\Required].
  */
 final class RequiredInitializerProvider implements ClassInitializerProvider
 {
-    private const ABSTRACT_CONTROLLER = 'Symfony\\Bundle\\FrameworkBundle\\Controller\\AbstractController';
     private const REQUIRED_ATTRIBUTE = 'Symfony\\Contracts\\Service\\Attribute\\Required';
+
+    /** @var array<string, string> */
+    private const CLASS_INITIALIZERS = [
+        'symfony\\bundle\\frameworkbundle\\controller\\abstractcontroller' => 'setContainer',
+        'symfony\\component\\validator\\constraintvalidator' => 'initialize',
+        'symfony\\component\\console\\helper\\inputawarehelper' => 'setInput',
+    ];
 
     public function getTargets(): array
     {
@@ -33,18 +40,16 @@ final class RequiredInitializerProvider implements ClassInitializerProvider
         $initializers = [];
         $className = $context->class->name;
 
-        $isAbstractController = strtolower($className) === strtolower(self::ABSTRACT_CONTROLLER);
-        if (!$isAbstractController) {
-            foreach ($context->class->parentClasses as $parent) {
-                if (strtolower($parent) === strtolower(self::ABSTRACT_CONTROLLER)) {
-                    $isAbstractController = true;
-                    break;
-                }
-            }
+        $selfInitializer = self::CLASS_INITIALIZERS[strtolower($className)] ?? null;
+        if ($selfInitializer !== null) {
+            $initializers[] = $selfInitializer;
         }
 
-        if ($isAbstractController) {
-            $initializers[] = 'setContainer';
+        foreach ($context->class->parentClasses as $parent) {
+            $parentInitializer = self::CLASS_INITIALIZERS[strtolower($parent)] ?? null;
+            if ($parentInitializer !== null) {
+                $initializers[] = $parentInitializer;
+            }
         }
 
         $requiredMethods = $context->codebase->findMethods(

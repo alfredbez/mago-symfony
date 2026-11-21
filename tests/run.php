@@ -520,6 +520,10 @@ $xmlExpected = [
             'non-existent-method' => 3,
             'nullable-return-statement' => 2,
         ],
+        'tests/fixtures-xml/Wave6ValidatorInitializer.php' => [],
+        'tests/fixtures-xml/Wave6ValidatorInitializerNegative.php' => [
+            'missing-constructor' => 2,
+        ],
     ],
     true => [
         'tests/fixtures-xml/ContainerXmlUsage.php' => [
@@ -588,6 +592,19 @@ $xmlExpected = [
             'non-iterable-object-iteration' => 1,
             'nullable-return-statement' => 2,
         ],
+        'tests/fixtures-xml/Wave6ValidatorInitializer.php' => $isSymfony7
+            ? [
+                'missing-constructor' => 2,
+            ]
+            : [],
+        'tests/fixtures-xml/Wave6ValidatorInitializerNegative.php' => [
+            'missing-constructor' => 2,
+        ],
+        'vendor/symfony/validator/ConstraintValidator.php' => $isSymfony7
+            ? [
+                'uninitialized-property' => 1,
+            ]
+            : [],
     ],
 ];
 foreach ([false => 'xml with extension', true => 'xml --no-extensions'] as $disabled => $label) {

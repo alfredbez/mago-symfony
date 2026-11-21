@@ -20,6 +20,7 @@ includes = [
     "vendor/symfony/security-http",
     "vendor/symfony/serializer",
     "vendor/symfony/service-contracts",
+    "vendor/symfony/validator",
     "vendor/psr/container",
     "vendor/psr/event-dispatcher",
 ]
