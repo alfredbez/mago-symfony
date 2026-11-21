@@ -1,0 +1,51 @@
+{
+    "schema_version": 1,
+    "targets": {
+        "drupal": {
+            "ref": "11.4.13",
+            "eliminated_count": 2,
+            "eliminated_by_code": {
+                "ambiguous-object-method-access": 1,
+                "mixed-assignment": 1
+            },
+            "added_by_code": []
+        },
+        "shopware": {
+            "ref": "v6.7.9.1",
+            "eliminated_count": 359,
+            "eliminated_by_code": {
+                "invalid-return-statement": 3,
+                "less-specific-return-statement": 36,
+                "non-existent-method": 320
+            },
+            "added_by_code": {
+                "invalid-return-statement": 36
+            }
+        },
+        "symfony": {
+            "ref": "v7.2.9",
+            "eliminated_count": 1121,
+            "eliminated_by_code": {
+                "less-specific-argument": 43,
+                "less-specific-return-statement": 17,
+                "mixed-argument": 1,
+                "mixed-assignment": 3,
+                "mixed-method-access": 511,
+                "non-existent-method": 546
+            },
+            "added_by_code": {
+                "method-access-on-null": 1,
+                "mixed-assignment": 1,
+                "mixed-method-access": 5,
+                "possible-method-access-on-null": 9,
+                "possibly-invalid-argument": 1
+            }
+        },
+        "symfony-demo": {
+            "ref": "v2.9.0",
+            "eliminated_count": 0,
+            "eliminated_by_code": [],
+            "added_by_code": []
+        }
+    }
+}
