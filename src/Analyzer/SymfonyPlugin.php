@@ -7,8 +7,12 @@ namespace AlfredBez\MagoSymfony\Analyzer;
 use AlfredBez\MagoSymfony\Analyzer\Providers\ConfigEndReturnTypeProvider;
 use AlfredBez\MagoSymfony\Analyzer\Providers\ConsoleCommandArgumentsHook;
 use AlfredBez\MagoSymfony\Analyzer\Providers\ContainerGetReturnTypeProvider;
+use AlfredBez\MagoSymfony\Analyzer\Providers\FormGetErrorsReturnTypeProvider;
+use AlfredBez\MagoSymfony\Analyzer\Providers\HeaderBagGetReturnTypeProvider;
 use AlfredBez\MagoSymfony\Analyzer\Providers\ParameterReturnTypeProvider;
+use AlfredBez\MagoSymfony\Analyzer\Providers\RequiredInitializerProvider;
 use AlfredBez\MagoSymfony\Analyzer\Providers\RootNodeReturnTypeProvider;
+use AlfredBez\MagoSymfony\Analyzer\Providers\SerializerReturnTypeProvider;
 use AlfredBez\MagoSymfony\Analyzer\Providers\ServiceClassMap;
 use AlfredBez\MagoSymfony\Analyzer\Providers\TreeBuilderReturnIssueFilter;
 use AlfredBez\MagoSymfony\Analyzer\Providers\TreeBuilderRootNodeHook;
@@ -23,7 +27,7 @@ final class SymfonyPlugin implements Plugin
         return new PluginDefinition(
             identifier: 'alfredbez/symfony',
             name: 'Symfony',
-            description: 'Types container services and Config TreeBuilder fluent chains.',
+            description: 'Types container services, Config TreeBuilder fluent chains, HTTP/Form/Serializer contracts, and Console commands.',
             defaultEnabled: true,
         );
     }
@@ -38,6 +42,10 @@ final class SymfonyPlugin implements Plugin
         }
         $registry->registerMethodReturnTypeProvider(new RootNodeReturnTypeProvider());
         $registry->registerMethodReturnTypeProvider(new ConfigEndReturnTypeProvider());
+        $registry->registerMethodReturnTypeProvider(new HeaderBagGetReturnTypeProvider());
+        $registry->registerMethodReturnTypeProvider(new FormGetErrorsReturnTypeProvider());
+        $registry->registerMethodReturnTypeProvider(new SerializerReturnTypeProvider());
+        $registry->registerClassInitializerProvider(new RequiredInitializerProvider());
         $registry->registerMethodCallAnalysisHook(new TreeBuilderRootNodeHook());
         $registry->registerClassLikeAnalysisHook(new ConsoleCommandArgumentsHook());
         $registry->registerIssueFilterHook(new TreeBuilderReturnIssueFilter());

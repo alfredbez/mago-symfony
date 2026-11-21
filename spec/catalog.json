@@ -54,6 +54,36 @@
       "kind": "analyzer-test",
       "scope": "Console options declared via addOption('--name') with leading dashes and setDefinition([...]).",
       "sha256": "52da8180ebd5fd0df13bc80063db23757e52766c2da251ef3b13e4ec8cdb4b76"
+    },
+    "psalm-header-bag": {
+      "url": "https://github.com/psalm/psalm-plugin-symfony/blob/54cdc276ad62386bb31a97bdfbfa22c04169fd45/tests/acceptance/acceptance/HeaderBag.feature",
+      "kind": "analyzer-test",
+      "scope": "HeaderBag::get() returns string when a non-null string default is supplied.",
+      "sha256": "abcb4174879dd202a266603b6dc0f0629cbba9b5830e57a92469f56e74c5f953"
+    },
+    "phpstan-form-get-errors": {
+      "url": "https://github.com/phpstan/phpstan-symfony/blob/92f34b806e90a5b7bc2baf04a680b71c72b9a62b/tests/Type/Symfony/data/FormInterface_getErrors.php",
+      "kind": "analyzer-test",
+      "scope": "FormInterface::getErrors($deep, $flatten) returns FormErrorIterator<FormError> unless $deep is true and $flatten is false.",
+      "sha256": "624e4eeab5a2c055843e91a6031f1d07475cdad632a67e94f769834dacb48eff"
+    },
+    "psalm-form-get-errors": {
+      "url": "https://github.com/psalm/psalm-plugin-symfony/blob/54cdc276ad62386bb31a97bdfbfa22c04169fd45/tests/acceptance/acceptance/forms/FormGetErrors.feature",
+      "kind": "analyzer-test",
+      "scope": "FormInterface::getErrors() iteration yields FormError unless called with (true, false).",
+      "sha256": "8c1d819df810754bbdfdd7b72c13c7bd8b2f74bdc64bc46e9ff29d0f00397bdb"
+    },
+    "psalm-serializer": {
+      "url": "https://github.com/psalm/psalm-plugin-symfony/blob/54cdc276ad62386bb31a97bdfbfa22c04169fd45/tests/acceptance/acceptance/serializer/SerializerInterface.feature",
+      "kind": "analyzer-test",
+      "scope": "SerializerInterface::deserialize() and DenormalizerInterface::denormalize() return type inference from $type.",
+      "sha256": "59b6d25195c952d9034f66cf1fab2cc3467c35567ba23637d2cc5d41231deefd"
+    },
+    "psalm-abstract-controller": {
+      "url": "https://github.com/psalm/psalm-plugin-symfony/blob/54cdc276ad62386bb31a97bdfbfa22c04169fd45/tests/acceptance/acceptance/AbstractController.feature",
+      "kind": "analyzer-test",
+      "scope": "AbstractController::$container and #[Required] setter methods are initialized by Symfony DI autowiring.",
+      "sha256": "cf4ecda6f5461cf37585d45fc956a91c95a3a4283434116c58e9e48c75a08d74"
     }
   },
   "cases": [
@@ -323,6 +353,90 @@
       ],
       "status": "covered",
       "derivation": "Mago SDK ReturnTypeProviderContext does not expose enclosing Command class, so static validation runs via ClassLikeAnalysisHook on Command descendants."
+    },
+    {
+      "id": "SYMFONY-H001",
+      "title": "HeaderBag::get() narrows return type to string when a non-null string default is supplied",
+      "sources": [
+        "psalm-header-bag"
+      ],
+      "fixture": "<?php function headerVal(\\Symfony\\Component\\HttpFoundation\\HeaderBag $h): string { return $h->get('X-Correlation-Id', 'fallback'); }",
+      "semantics": "HeaderBag::get($key, $default) returns the string header value when present and $default otherwise. When $default is a non-null string, the result cannot be null.",
+      "analyzer_expectation": "Return non-empty-string when $default is a non-empty string, string when $default is any non-null string, and fall back to Symfony's declared ?string when $default is omitted or nullable.",
+      "negative_control": "Calling $headers->get('X-Missing') without a default still reports nullable-return-statement and invalid-return-statement when returned as string.",
+      "priority": "P0",
+      "versions": "Verified on Mago 1.60.2 / PHP 8.3 against Symfony HttpFoundation 6.4 and 7.x.",
+      "coverage": [
+        "tests/fixtures-xml/SymfonyComponents.php",
+        "tests/fixtures-xml/Wave4ContractsNegative.php",
+        "tests/run.php",
+        "tests/runtime.php"
+      ],
+      "status": "covered",
+      "derivation": "Clean-room MethodReturnTypeProvider for Symfony\\Component\\HttpFoundation\\HeaderBag::get."
+    },
+    {
+      "id": "SYMFONY-F001",
+      "title": "FormInterface::getErrors() returns FormErrorIterator<FormError> for flat error iteration",
+      "sources": [
+        "phpstan-form-get-errors",
+        "psalm-form-get-errors"
+      ],
+      "fixture": "<?php function formErrors(\\Symfony\\Component\\Form\\FormInterface $f): array { $m = []; foreach ($f->getErrors() as $e) { $m[] = $e->getMessage(); } return $m; }",
+      "semantics": "FormInterface::getErrors($deep = false, $flatten = true) yields FormError instances whenever $deep is false or $flatten is true, and yields FormError|FormErrorIterator only when $deep is true and $flatten is false.",
+      "analyzer_expectation": "Parameterize FormErrorIterator<FormError> when $deep is false/omitted or $flatten is true/omitted, and FormErrorIterator<FormError|FormErrorIterator> when $deep may be true and $flatten may be false.",
+      "negative_control": "Iterating $form->getErrors(true, false) and calling $entry->getMessage() reports non-existent-method on FormErrorIterator; disabling extensions reports invalid-iterator and non-existent-method on all getErrors() loops.",
+      "priority": "P0",
+      "versions": "Verified on Mago 1.60.2 / PHP 8.3 against Symfony Form 6.4 and 7.x.",
+      "coverage": [
+        "tests/fixtures-xml/SymfonyComponents.php",
+        "tests/fixtures-xml/Wave4ContractsNegative.php",
+        "tests/run.php",
+        "tests/runtime.php"
+      ],
+      "status": "covered",
+      "derivation": "Clean-room MethodReturnTypeProvider supplying the missing @template generic argument on FormInterface::getErrors()."
+    },
+    {
+      "id": "SYMFONY-S001",
+      "title": "SerializerInterface::deserialize() and DenormalizerInterface::denormalize() resolve target class and array types",
+      "sources": [
+        "psalm-serializer"
+      ],
+      "fixture": "<?php function deser(\\Symfony\\Component\\Serializer\\SerializerInterface $s): \\SymfonyFixtureXml\\DomainEvent { return $s->deserialize('{}', \\SymfonyFixtureXml\\DomainEvent::class, 'json'); }",
+      "semantics": "SerializerInterface::deserialize() and DenormalizerInterface::denormalize() hydrate an instance of $type (or an N-dimensional int-keyed array of $type for trailing [] suffixes such as Foo::class . '[]').",
+      "analyzer_expectation": "Resolve literal class names and trailing [] array dimensions to Type::namedObject() or nested Type::array(Type::int(), ...) when the target class exists in the codebase.",
+      "negative_control": "Calling a nonexistent method on a deserialized object or array element reports non-existent-method on DomainEvent; disabling extensions reverts to mixed-assignment and mixed-property-access.",
+      "priority": "P0",
+      "versions": "Verified on Mago 1.60.2 / PHP 8.3 against Symfony 6.4 and 7.x.",
+      "coverage": [
+        "tests/fixtures-xml/SymfonyComponents.php",
+        "tests/fixtures-xml/Wave4ContractsNegative.php",
+        "tests/run.php"
+      ],
+      "status": "covered",
+      "derivation": "Extends Psalm's class-string deserialization spec to also support Symfony's 'Foo[]' and 'Foo[][]' array type notation."
+    },
+    {
+      "id": "SYMFONY-C007",
+      "title": "AbstractController::setContainer() and #[Required] methods are recognized as class initializers",
+      "sources": [
+        "psalm-abstract-controller"
+      ],
+      "fixture": "<?php use Symfony\\Contracts\\Service\\Attribute\\Required; final class Svc { private string $v; #[Required] public function init(): void { $this->v = 'ok'; } }",
+      "semantics": "Symfony DependencyInjection autowiring invokes methods marked with #[Symfony\\Contracts\\Service\\Attribute\\Required] (including AbstractController::setContainer()) before the service or controller is used.",
+      "analyzer_expectation": "Return setContainer on AbstractController subclasses and any method carrying #[Required] from ClassInitializerProvider so definite property assignments in those methods satisfy check-property-initialization.",
+      "negative_control": "Properties not assigned in any constructor or #[Required] method still report missing-constructor on UninitializedServiceNegative; disabling extensions reports missing-constructor on AbstractController subclasses and RequiredAutowiredService.",
+      "priority": "P1",
+      "versions": "Verified on Mago 1.60.2 / PHP 8.3 against Symfony 6.4 and 7.x.",
+      "coverage": [
+        "tests/fixtures-xml/SymfonyComponents.php",
+        "tests/fixtures-xml/Wave4ContractsNegative.php",
+        "tests/run.php",
+        "tests/runtime.php"
+      ],
+      "status": "covered",
+      "derivation": "Uses Mago SDK ClassInitializerProvider and Codebase::findMethods(withAnyAttribute) to discover #[Required] initializers."
     }
   ]
 }

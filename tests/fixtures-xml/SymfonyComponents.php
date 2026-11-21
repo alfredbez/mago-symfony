@@ -12,15 +12,41 @@ use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
 use Symfony\Component\EventDispatcher\EventDispatcherInterface;
+use Symfony\Component\Form\FormInterface;
 use Symfony\Component\HttpFoundation\HeaderBag;
 use Symfony\Component\HttpFoundation\RedirectResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\Messenger\MessageBusInterface;
 use Symfony\Component\Messenger\Stamp\HandledStamp;
+use Symfony\Component\Serializer\Normalizer\DenormalizerInterface;
+use Symfony\Component\Serializer\SerializerInterface;
+use Symfony\Contracts\Service\Attribute\Required;
+use SymfonyFixture\ConcreteGreeter;
+use SymfonyFixture\Mailer;
 
 final class DomainEvent
 {
     public function __construct(public readonly string $name) {}
+}
+
+final class RequiredAutowiredService
+{
+    private ConcreteGreeter $greeter;
+    private Mailer $mailer;
+
+    #[Required]
+    public function autowireDependencies(ConcreteGreeter $greeter, Mailer $mailer): void
+    {
+        $this->greeter = $greeter;
+        $this->mailer = $mailer;
+    }
+
+    public function run(): string
+    {
+        $this->mailer->send('team@example.com');
+
+        return $this->greeter->implementationOnly();
+    }
 }
 
 class ValidatedCommand extends Command
@@ -107,5 +133,56 @@ final class SymfonyComponentsController extends AbstractController
         }
 
         return $this->redirectToRoute('app_home');
+    }
+
+    /**
+     * @return non-empty-string
+     */
+    public function exerciseWave4Contracts(
+        HeaderBag $headers,
+        FormInterface $form,
+        SerializerInterface $serializer,
+        DenormalizerInterface $denormalizer,
+    ): string {
+        $fallbackHeader = $headers->get('X-Correlation-Id', 'default-correlation-id');
+        $emptyDefaultHeader = $headers->get('X-Empty-Default', '');
+
+        $messages = [
+            $fallbackHeader,
+            $emptyDefaultHeader,
+        ];
+
+        foreach ($form->getErrors() as $errDefault) {
+            $messages[] = $errDefault->getMessage();
+        }
+        foreach ($form->getErrors(true) as $errDeepFlat) {
+            $messages[] = $errDeepFlat->getMessage();
+        }
+        foreach ($form->getErrors(false, false) as $errShallowUnflat) {
+            $messages[] = $errShallowUnflat->getMessage();
+        }
+        foreach ($form->getErrors(true, true) as $errExplicit) {
+            $messages[] = $errExplicit->getMessage();
+        }
+
+        $dto = $serializer->deserialize('{"name":"ev"}', DomainEvent::class, 'json');
+        $messages[] = $dto->name;
+
+        $dtoList = $serializer->deserialize('[{"name":"ev"}]', DomainEvent::class . '[]', 'json');
+        foreach ($dtoList as $item) {
+            $messages[] = $item->name;
+        }
+
+        $denormalized = $denormalizer->denormalize(['name' => 'ev'], DomainEvent::class);
+        $messages[] = $denormalized->name;
+
+        $denormalizedMatrix = $denormalizer->denormalize([[['name' => 'ev']]], DomainEvent::class . '[][]');
+        foreach ($denormalizedMatrix as $row) {
+            foreach ($row as $cell) {
+                $messages[] = $cell->name;
+            }
+        }
+
+        return $fallbackHeader;
     }
 }

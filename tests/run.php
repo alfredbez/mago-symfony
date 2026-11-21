@@ -498,12 +498,19 @@ $xmlExpected = [
             'alfredbez/symfony/unknown-console-argument' => 2,
             'alfredbez/symfony/unknown-console-option' => 2,
         ],
+        'tests/fixtures-xml/Wave4ContractsNegative.php' => [
+            'invalid-return-statement' => 1,
+            'missing-constructor' => 1,
+            'non-existent-method' => 3,
+            'nullable-return-statement' => 1,
+        ],
     ],
     true => [
         'tests/fixtures-xml/ContainerXmlUsage.php' => [
             'ambiguous-object-method-access' => 2,
             'invalid-array-access' => 5,
             'less-specific-return-statement' => 1,
+            'missing-constructor' => $isSymfony7 ? 1 : 0,
             'mixed-argument' => 4,
             'mixed-array-access' => 2,
             'mixed-assignment' => 1,
@@ -517,13 +524,31 @@ $xmlExpected = [
             'possibly-null-array-access' => 5,
             'possibly-null-operand' => 3,
         ],
-        'tests/fixtures-xml/SymfonyComponents.php' => [],
+        'tests/fixtures-xml/SymfonyComponents.php' => [
+            'invalid-iterator' => 3,
+            'invalid-return-statement' => 1,
+            'missing-constructor' => $isSymfony7 ? 2 : 1,
+            'mixed-assignment' => 7,
+            'mixed-property-access' => 4,
+            'non-existent-method' => 4,
+            'nullable-return-statement' => 1,
+        ],
         'tests/fixtures-xml/ContainerXmlNegative.php' => [
+            'missing-constructor' => $isSymfony7 ? 1 : 0,
             'mixed-method-access' => 4,
             'possibly-invalid-argument' => 4,
             'possibly-null-argument' => 4,
         ],
         'tests/fixtures-xml/ConsoleCommandNegative.php' => [],
+        'tests/fixtures-xml/Wave4ContractsNegative.php' => [
+            'invalid-iterator' => 1,
+            'invalid-return-statement' => 1,
+            'missing-constructor' => 1,
+            'mixed-assignment' => 3,
+            'mixed-method-access' => 2,
+            'non-existent-method' => 1,
+            'nullable-return-statement' => 1,
+        ],
     ],
 ];
 foreach ([false => 'xml with extension', true => 'xml --no-extensions'] as $disabled => $label) {
@@ -533,6 +558,10 @@ $failures += assertMessageCount('xml with extension', $xmlWith, 'tests/fixtures-
 $failures += assertMessageCount('xml with extension', $xmlWith, 'tests/fixtures-xml/ConsoleCommandNegative.php', 'alfredbez/symfony/unknown-console-option', 'dryrun', 1);
 $failures += assertMessageCount('xml with extension', $xmlWith, 'tests/fixtures-xml/ConsoleCommandNegative.php', 'alfredbez/symfony/unknown-console-argument', 'missing_target', 1);
 $failures += assertMessageCount('xml with extension', $xmlWith, 'tests/fixtures-xml/ConsoleCommandNegative.php', 'alfredbez/symfony/unknown-console-option', 'missing_force', 1);
+$failures += assertMessageCount('xml with extension', $xmlWith, 'tests/fixtures-xml/Wave4ContractsNegative.php', 'non-existent-method', 'FormErrorIterator', 1);
+$failures += assertMessageCount('xml with extension', $xmlWith, 'tests/fixtures-xml/Wave4ContractsNegative.php', 'non-existent-method', 'nonExistentMethodOnDomainEvent', 1);
+$failures += assertMessageCount('xml with extension', $xmlWith, 'tests/fixtures-xml/Wave4ContractsNegative.php', 'non-existent-method', 'anotherMissingMethod', 1);
+$failures += assertMessageCount('xml with extension', $xmlWith, 'tests/fixtures-xml/Wave4ContractsNegative.php', 'missing-constructor', 'UninitializedServiceNegative', 1);
 
 if ($failures > 0) {
     fwrite(STDERR, "\n{$failures} assertion(s) failed\n");

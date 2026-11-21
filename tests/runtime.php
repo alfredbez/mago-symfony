@@ -112,4 +112,23 @@ check($loaded->parameterFor('app.debug') === ['kind' => 'bool', 'value' => true]
 $prefixedOption = new \Symfony\Component\Console\Input\InputOption('--bypass-locking', null, \Symfony\Component\Console\Input\InputOption::VALUE_NONE);
 check($prefixedOption->getName() === 'bypass-locking', 'InputOption strips leading dashes from option names at runtime');
 
+$headers = new \Symfony\Component\HttpFoundation\HeaderBag(['X-Present' => 'val']);
+check($headers->get('X-Present', 'fallback') === 'val', 'HeaderBag::get returns present header value');
+check($headers->get('X-Missing', 'fallback') === 'fallback', 'HeaderBag::get returns string default when header is missing');
+check($headers->get('X-Missing') === null, 'HeaderBag::get returns null when header is missing and default is null');
+
+$formFactory = \Symfony\Component\Form\Forms::createFormFactory();
+$rootForm = $formFactory->createBuilder()->add('child')->getForm();
+$rootForm->get('child')->addError(new \Symfony\Component\Form\FormError('child error'));
+foreach ($rootForm->getErrors(true, true) as $flatErr) {
+    check($flatErr instanceof \Symfony\Component\Form\FormError, 'getErrors(true, true) yields FormError instances');
+}
+foreach ($rootForm->getErrors(true, false) as $nestedEntry) {
+    check($nestedEntry instanceof \Symfony\Component\Form\FormErrorIterator, 'getErrors(true, false) yields nested FormErrorIterator for child errors');
+}
+
+$refMethod = new ReflectionMethod(\Symfony\Bundle\FrameworkBundle\Controller\AbstractController::class, 'setContainer');
+$requiredAttrs = $refMethod->getAttributes(\Symfony\Contracts\Service\Attribute\Required::class);
+check($requiredAttrs !== [], 'AbstractController::setContainer carries #[Required] attribute');
+
 fwrite(STDOUT, "Symfony runtime contracts PASS\n\n");
