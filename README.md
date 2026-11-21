@@ -1,79 +1,100 @@
-# mago-symfony
+# alfredbez/mago-symfony
 
-Symfony support for Mago 1.60.2 through its PHP extension SDK.
+Symfony support for [Mago](https://github.com/carthage-software/mago) 1.60.2 through its PHP extension SDK.
 
 ## Features
 
-- Resolves literal service ids on PSR and Symfony containers, `ContainerBuilder`, `ServiceLocator`, and `ServiceProviderInterface`.
-- Uses an explicit service map before the class-name fallback. Numeric string ids work; unknown ids keep the native return type.
-- Preserves null for invalid-reference flags. Base `Container` can return null for flags `0`, `2`, `3`, and `4`. `ContainerBuilder` throws for `0` and `1`.
-- Tracks Config node parents through `children()`, all seven built-in node types, `node()`, prototypes, validation, normalization, and `end()`.
-- Reports invalid methods on literal non-array TreeBuilder roots within the same function scope.
+- **Compiled container XML and JSON service maps.** Parses Symfony's compiled container XML (`MAGO_SYMFONY_CONTAINER_XML`, with automatic discovery of `var/cache/dev/*Container.xml`) for public and private services, multi-hop aliases with cycle protection, and class or service factories refined through codebase return types. Falls back to a JSON service map (`MAGO_SYMFONY_CONTAINER_MAP` or `.mago/symfony-container.json`) and class-name resolution for `ContainerInterface`, `Container`, `ContainerBuilder`, `ServiceLocator`, and `ServiceProviderInterface`.
+- **Typed container and `ParameterBag` parameters.** Resolves literal keys on `ParameterBagInterface::get()`, `ContainerInterface::getParameter()`, and `AbstractController::getParameter()` from compiled XML into concrete scalar, list, keyed-array, constant, binary, and `%env(...)%` processor types.
+- **Invalid-reference flag nullability.** Preserves nullable returns for flags `0`, `2`, `3`, and `4` on `Container`, and treats flags `0` and `1` as non-null on `ContainerBuilder`.
+- **Config `TreeBuilder` fluent chains and custom `NodeBuilder` mappings.** Tracks parent chains across `getRootNode()`, `children()`, all built-in node types, `node()`, prototypes, `validate()`, `beforeNormalization()`, and `end()`. Tracks `NodeBuilder::setNodeClass()`, `NodeBuilder::setParent()`, custom `NodeBuilder` subclasses across `end()` and nested `arrayNode()->children()`, and custom prototype mappings. Untracked `NodeDefinition::end()` delegates to Symfony's declared return type on Symfony 6.4/7.2 instead of fabricating `null`, while tracked parents and Symfony 7 `ArrayNodeDefinition<null>` stay exact.
+- **Non-array `TreeBuilder` root validation and Symfony 7 return filter.** Reports `alfredbez/symfony/invalid-root-node-method` for invalid calls on literal non-array `TreeBuilder` roots within the same function scope, and filters Symfony 7's `TreeBuilder<string>` vs `TreeBuilder<'array'>` default-parameter false positive.
+- **Console command argument and option validation.** Reports `alfredbez/symfony/unknown-console-argument` and `alfredbez/symfony/unknown-console-option` when `Command` subclasses request undeclared literal names from `InputInterface::getArgument()` or `getOption()`.
 
-## Install and configure a worker
+## Supported versions
 
-Requires PHP 8.1 or later and exactly `carthage-software/mago` 1.60.2. The fixture suite uses Symfony 6.4. CI targets PHP 8.3 and 8.4.
+- PHP `~8.1.0 || ~8.2.0 || ~8.3.0 || ~8.4.0 || ~8.5.0 || ~8.6.0`
+- Mago (`carthage-software/mago`) `~1.60.2`
+- Symfony `^6.4 || ^7.0` (CI tests PHP 8.3 and 8.4 against both Symfony 6.4 and 7.0)
 
-```bash
+## Installation and worker setup
+
+`alfredbez/mago-symfony` is not published on Packagist yet. Register the GitHub repository and require `dev-main`:
+
+```shell
 composer config repositories.mago-symfony vcs https://github.com/alfredbez/mago-symfony
-composer require --dev 'alfredbez/mago-symfony:dev-main'
+composer require --dev alfredbez/mago-symfony:dev-main
 ```
 
-Create `mago-symfony-worker.php` in your project root:
+Create `.mago/symfony-worker.php`:
 
 ```php
 <?php
 
-require __DIR__ . '/vendor/autoload.php';
+declare(strict_types=1);
 
-(new \Mago\Sdk\Worker(\AlfredBez\MagoSymfony\SymfonyExtension::create()))->run();
+use AlfredBez\MagoSymfony\SymfonyExtension;
+use Mago\Sdk\Worker;
+
+require dirname(__DIR__) . '/vendor/autoload.php';
+
+(new Worker(SymfonyExtension::create()))->run();
 ```
 
-Register the worker in your `mago.toml`:
+Register the worker in `mago.toml` and include your installed Symfony and PSR packages in `[source].includes`:
 
 ```toml
 [extension-hosts.symfony]
-command = ["php", "mago-symfony-worker.php"]
+command = ["php", ".mago/symfony-worker.php"]
 workers = 1
 ```
 
-Include your installed Symfony and PSR packages in Mago's source configuration so their classes and interfaces are available. This repository's [mago.toml](mago.toml) is a fixture-suite example.
+### Container metadata environment variables
 
-Create `.mago/symfony-container.json` with service ids as keys and class or interface names as values:
+- `MAGO_SYMFONY_CONTAINER_XML`: path to Symfony's compiled container XML dump (for example `var/cache/dev/App_KernelDevDebugContainer.xml`). When unset, the extension searches `var/cache/dev/*Container.xml` relative to the working directory.
+- `MAGO_SYMFONY_CONTAINER_MAP`: path to a JSON file mapping service ids to class or interface names (defaults to `.mago/symfony-container.json` when present). Map targets must exist in Mago's codebase.
 
-```json
-{
-  "app.mailer": "App\\Service\\Mailer",
-  "App\\Contract\\Greeter": "App\\Service\\ConcreteGreeter"
-}
+Validate the extension host and run the analyzer:
+
+```shell
+vendor/bin/mago extension validate
+vendor/bin/mago analyze
 ```
 
-Set `MAGO_SYMFONY_CONTAINER_MAP` in the worker environment to use another path. Relative paths resolve against the worker's working directory. Without a readable JSON map, only the class-name fallback applies. Map targets must exist in Mago's codebase.
+## Known limits (Mago 1.60.2)
 
-## Known gaps
+- Without a compiled container XML or JSON map, class-name service ids are a typing convention rather than proof of container registration. `has()` retains its native `bool` return type.
+- Return-type providers cannot inspect `TreeBuilder` constructor AST syntax in Mago 1.60.2. `RootNodeReturnTypeProvider` infers `ArrayNodeDefinition`, and `TreeBuilderRootNodeHook` separately reports invalid calls on local literal non-array roots (isolated to the enclosing function scope, without branch or by-reference capture tracking).
+- On Symfony 6.4/7.2 (before Symfony's `@template TParent = null`), an untracked `NodeBuilder` stays nullable (`ArrayNodeDefinition|null`) and an untracked `NodeDefinition` parameter delegates to Symfony's declared `end()` return type.
+- On Symfony 7.4, passing a custom (non-built-in) type name to `ArrayNodeDefinition::prototype()` triggers Symfony's own `@template T` constraint on `prototype()`; overriding built-in types via `setNodeClass('scalar', ...)` works on both Symfony 6.4 and 7.x.
+- `ConsoleCommandArgumentsHook` checks static `addArgument()` / `addOption()` declarations in `configure()` and skips commands that call `parent::configure()` or `setDefinition()`.
 
-- A class-name id is a typing convention, not proof that the container registers that service. Maps are explicit typing claims; private, removed, optional, scalar, and factory-specific services need richer metadata.
-- The map does not parse Symfony container XML or infer parameters. `has()` retains its native bool type; it does not prove that an id is registered.
-- Return-type providers cannot inspect TreeBuilder constructor syntax in this SDK. Root inference assumes an array; a separate hook reports invalid methods for local literal non-array constructors. Non-array-specific methods and exact root return types remain incomplete.
-- The root hook does not follow branches, aliases, properties, or by-reference closure captures. Nested function scopes are isolated.
-- Untracked NodeBuilder parents remain nullable. Exact null for standalone construction, explicit `setParent()` mutations, custom node mappings, and unions of different tracked parents remain incomplete.
+## Tests, corpus checks, and benchmarks
 
-## Run tests and verify harvested sources
-
-```bash
+```shell
 composer install
 php tests/check-spec.php
 composer test
 ```
 
-`composer test` checks real Symfony runtime contracts, validates the extension, and compares exact per-file diagnostic counts in both extension modes. New fixtures also pin diagnostic codes and locations. The committed test map makes the suite independent of a local `.mago` directory.
+`composer test` verifies real Symfony runtime contracts (`tests/runtime.php`), validates the extension host, and checks exact per-file diagnostics in both extension modes (with JSON map and compiled XML).
 
-[spec/catalog.json](spec/catalog.json) records eight conformance cases and commit-pinned PHPStan, Psalm, and Symfony sources. Each case states how the upstream test was adapted and links positive and negative fixtures. The analyzer plugins themselves are not copied or executed.
+Run pinned OSS corpus snapshot checks (`symfony-demo`, `symfony`, `shopware`, `drupal`) against `tools/corpus-baseline.json`:
 
-To re-fetch and verify the source fingerprints, install and authenticate the GitHub CLI, then run:
-
-```bash
-php spec/harvest.php
+```shell
+php tools/corpus-run.php --check
+php tools/corpus-run.php --target=symfony-demo,symfony --check
+php tools/corpus-run.php --update-baseline
 ```
 
-The harvester reads only the pinned source files and compares SHA-256 hashes. It does not rewrite fixtures or require network access during normal tests.
+Run same-host local benchmarks (`--save` / `--compare`):
+
+```shell
+php bench/run-local.php --iterations=10000 --runs=5
+```
+
+Re-verify pinned upstream conformance source hashes with `php spec/harvest.php`.
+
+## License
+
+MIT. See [LICENSE](LICENSE).
