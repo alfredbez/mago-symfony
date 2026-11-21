@@ -95,12 +95,21 @@ foreach ($targets as $name => $spec) {
     if ($spec['warmup_xml'] && is_file($dir . '/bin/console')) {
         $matches = glob($dir . '/' . $spec['xml_glob']) ?: [];
         if ($matches === []) {
-            runCmd([PHP_BINARY, 'bin/console', 'cache:warmup', '--env=dev'], $dir, ['APP_ENV' => 'dev', 'APP_DEBUG' => '1']);
+            $warm = runCmd([PHP_BINARY, 'bin/console', 'cache:warmup', '--env=dev'], $dir, ['APP_ENV' => 'dev', 'APP_DEBUG' => '1']);
+            if ($warm['exit'] !== 0) {
+                fwrite(STDERR, "FAIL {$name}: cache:warmup exited {$warm['exit']}: {$warm['stderr']}\n");
+                $failures++;
+                continue;
+            }
             $matches = glob($dir . '/' . $spec['xml_glob']) ?: [];
         }
         if ($matches !== []) {
             sort($matches);
             $xmlPath = $matches[0];
+        } else {
+            fwrite(STDERR, "FAIL {$name}: expected compiled container XML matching {$spec['xml_glob']}\n");
+            $failures++;
+            continue;
         }
     }
 

@@ -85,14 +85,19 @@ final class TreeBuilderReturnIssueFilter implements IssueFilterHook
     private function findAssignedRootType(string $contents, int $beforeOffset, string $variable): ?string
     {
         $prefix = substr($contents, 0, $beforeOffset);
-        $pattern = '/' . preg_quote($variable, '/') . '\s*=\s*(new\s+\\\\?(?:Symfony\\\\Component\\\\Config\\\\Definition\\\\Builder\\\\)?TreeBuilder\s*\([^;]*\))/s';
-        if (preg_match_all($pattern, $prefix, $matches) < 1) {
+        if (preg_match_all('/\bfunction\b[^{]*\{/', $prefix, $fnMatches, PREG_OFFSET_CAPTURE) >= 1) {
+            $lastFn = $fnMatches[0][array_key_last($fnMatches[0])];
+            $prefix = substr($prefix, $lastFn[1]);
+        }
+
+        $assignPattern = '/' . preg_quote($variable, '/') . '\s*=\s*([^;]+);/s';
+        if (preg_match_all($assignPattern, $prefix, $matches) < 1) {
             return null;
         }
 
-        $last = $matches[1][array_key_last($matches[1])];
+        $lastRhs = trim($matches[1][array_key_last($matches[1])]);
 
-        return $this->extractConstructedRootType($last);
+        return $this->extractConstructedRootType($lastRhs);
     }
 
     /** @return list<string> */

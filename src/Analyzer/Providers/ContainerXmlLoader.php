@@ -467,8 +467,8 @@ final class ContainerXmlLoader
                 'int' => ['kind' => 'type', 'type' => 'int'],
                 'float' => ['kind' => 'type', 'type' => 'float'],
                 'bool' => ['kind' => 'type', 'type' => 'bool'],
-                'string', 'base64', 'resolve', 'trim', 'file', 'url', 'query_string' => ['kind' => 'type', 'type' => 'string'],
-                'json', 'csv', 'key' => ['kind' => 'type', 'type' => 'array'],
+                'string', 'base64', 'resolve', 'trim', 'file' => ['kind' => 'type', 'type' => 'string'],
+                'json', 'csv', 'url', 'query_string' => ['kind' => 'type', 'type' => 'array'],
                 default => ['kind' => 'type', 'type' => 'mixed'],
             };
         }

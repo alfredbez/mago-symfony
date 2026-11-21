@@ -104,6 +104,12 @@ final class ConsoleCommandArgumentsHook implements ClassLikeAnalysisHook
             }
 
             if ($methodName !== 'addargument' && $methodName !== 'addoption') {
+                if (!isset(self::KNOWN_SAFE_CONFIGURE_METHODS[$methodName])) {
+                    $rawRecv = $this->unwrap($source, $source->getChildren($call)[0] ?? null);
+                    if ($rawRecv !== null && $source->getText($rawRecv) === '$this') {
+                        return null;
+                    }
+                }
                 continue;
             }
 
@@ -158,6 +164,9 @@ final class ConsoleCommandArgumentsHook implements ClassLikeAnalysisHook
             }
 
             if ($called === 'getargument' && $arguments !== [] && !isset($arguments[$name])) {
+                if ($name === 'command') {
+                    continue;
+                }
                 $context->report(
                     Level::Error,
                     'unknown-console-argument',
@@ -182,6 +191,17 @@ final class ConsoleCommandArgumentsHook implements ClassLikeAnalysisHook
             }
         }
     }
+
+    private const KNOWN_SAFE_CONFIGURE_METHODS = [
+        'setname' => true,
+        'setdescription' => true,
+        'sethelp' => true,
+        'setaliases' => true,
+        'sethidden' => true,
+        'addusage' => true,
+        'setprocesstitle' => true,
+        'setcode' => true,
+    ];
 
     private const DEFAULT_APPLICATION_OPTIONS = [
         'help' => true,
