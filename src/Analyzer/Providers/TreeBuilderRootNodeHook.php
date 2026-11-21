@@ -11,7 +11,7 @@ use Mago\Sdk\Analyzer\NodeAnalysisContext;
 use Mago\Sdk\Reporting\Issue;
 use Mago\Sdk\Reporting\Level;
 use Mago\Sdk\SourceLocation;
-use Mago\Sdk\Syntax\CallExpression;
+use Mago\Sdk\Span;
 use Mago\Sdk\Syntax\Node;
 use Mago\Sdk\Syntax\NodeKind;
 use Mago\Sdk\Syntax\SourceFile;
@@ -19,17 +19,11 @@ use Mago\Sdk\Syntax\SourceFile;
 /**
  * Checks calls on `TreeBuilder::getRootNode()` when the TreeBuilder uses a
  * non-array root node type such as `'scalar'` or `'boolean'`.
- *
- * `RootNodeReturnTypeProvider` narrows `getRootNode()` to `ArrayNodeDefinition`
- * (the default `'array'` root type), because `ReturnTypeProviderContext` cannot
- * inspect the constructor arguments of `new TreeBuilder($name, $type)`. This
- * hook reads the literal `$type` from `new TreeBuilder(...)` in the same scope
- * and flags methods on the root node that do not exist on that concrete node
- * definition class.
  */
 final class TreeBuilderRootNodeHook implements MethodCallAnalysisHook
 {
     private const TREE_BUILDER = 'Symfony\\Component\\Config\\Definition\\Builder\\TreeBuilder';
+    private const LOWER_TREE_BUILDER = 'symfony\\component\\config\\definition\\builder\\treebuilder';
     private const NS = 'Symfony\\Component\\Config\\Definition\\Builder\\';
 
     private const NODE_TYPE_MAP = [
@@ -49,6 +43,11 @@ final class TreeBuilderRootNodeHook implements MethodCallAnalysisHook
         'getnode' => true,
         'validate' => true,
     ];
+
+    private ?SourceFile $indexedSource = null;
+
+    /** @var array<int, array<int, Node>> */
+    private array $methodCallsBySpan = [];
 
     public function getTargets(): array
     {
@@ -72,38 +71,82 @@ final class TreeBuilderRootNodeHook implements MethodCallAnalysisHook
         }
 
         $source = $context->analysis->getSourceFile();
-        $targetSpan = $context->node->span;
-        foreach ($source->getNodes(NodeKind::MethodCall) as $call) {
-            if ($call->span->start === $targetSpan->start && $call->span->end === $targetSpan->end) {
-                $this->checkRootNodeCall($context, $source, $call);
-                break;
+        $call = $this->findMethodCallBySpan($source, $context->node->span);
+        if ($call !== null) {
+            $this->checkRootNodeCall($context, $source, $call);
+        }
+    }
+
+    private function findMethodCallBySpan(SourceFile $source, Span $targetSpan): ?Node
+    {
+        $root = $source->getNode(0);
+        if ($root->span->start <= $targetSpan->start && $root->span->end >= $targetSpan->end) {
+            $found = $this->descendToMethodCall($source, $root, $targetSpan->start, $targetSpan->end);
+            if ($found !== null) {
+                return $found;
             }
+        }
+
+        if ($this->indexedSource !== $source) {
+            $this->indexedSource = $source;
+            $this->methodCallsBySpan = [];
+            foreach ($source->getNodes(NodeKind::MethodCall) as $methodCall) {
+                $this->methodCallsBySpan[$methodCall->span->start][$methodCall->span->end] ??= $methodCall;
+            }
+        }
+
+        return $this->methodCallsBySpan[$targetSpan->start][$targetSpan->end] ?? null;
+    }
+
+    private function descendToMethodCall(SourceFile $source, Node $node, int $start, int $end): ?Node
+    {
+        $current = $node;
+        while (true) {
+            if ($current->kind === NodeKind::MethodCall && $current->span->start === $start && $current->span->end === $end) {
+                return $current;
+            }
+
+            $next = null;
+            foreach ($source->getChildren($current) as $child) {
+                if ($child->span->start <= $start && $child->span->end >= $end) {
+                    $next = $child;
+                    break;
+                }
+            }
+
+            if ($next === null) {
+                return null;
+            }
+
+            $current = $next;
         }
     }
 
     private function checkRootNodeCall(NodeAnalysisContext $context, SourceFile $source, Node $call): void
     {
         $scope = $this->enclosingScope($source, $call);
-        $callExpr = CallExpression::fromNode($source, $call);
-        $instantiation = $this->resolveTreeBuilderInstantiation($source, $scope, $callExpr);
+        $instantiation = $this->resolveTreeBuilderInstantiation($source, $scope, $call);
         if ($instantiation === null) {
             return;
         }
 
         $nodeType = $this->extractTreeBuilderType($source, $instantiation);
-        if ($nodeType === null || strtolower($nodeType) === 'array') {
+        if ($nodeType === null) {
             return;
         }
 
-        $actualNodeClass = self::NODE_TYPE_MAP[strtolower($nodeType)] ?? null;
+        $lowerType = strtolower($nodeType);
+        if ($lowerType === 'array') {
+            return;
+        }
+
+        $actualNodeClass = self::NODE_TYPE_MAP[$lowerType] ?? null;
         if ($actualNodeClass === null || !$context->codebase->classExists($actualNodeClass)) {
             return;
         }
 
-        // Direct fluent chain: $treeBuilder->getRootNode()->children()
         $this->checkChainFromExpression($context, $source, $call, $actualNodeClass, $nodeType);
 
-        // Local variable assignment: $root = $treeBuilder->getRootNode(); $root->children();
         $assignedVar = $this->assignedVariableName($source, $call);
         if ($assignedVar !== null) {
             $this->checkVariableUsages($context, $source, $scope, $assignedVar, $call->span->end, $actualNodeClass, $nodeType);
@@ -112,23 +155,34 @@ final class TreeBuilderRootNodeHook implements MethodCallAnalysisHook
 
     private function enclosingScope(SourceFile $source, Node $node): Node
     {
-        foreach ($source->getAncestors($node) as $ancestor) {
-            if (
-                $ancestor->kind === NodeKind::Method
-                || $ancestor->kind === NodeKind::Function
-                || $ancestor->kind === NodeKind::Closure
-                || $ancestor->kind === NodeKind::ArrowFunction
-            ) {
-                return $ancestor;
+        $current = $source->getParent($node);
+        while ($current !== null) {
+            if (self::isScopeBoundary($current->kind)) {
+                return $current;
             }
+
+            $parent = $source->getParent($current);
+            if ($parent === null) {
+                return $current;
+            }
+
+            $current = $parent;
         }
 
-        return $source->getNodes(NodeKind::Program)[0];
+        return $node;
     }
 
-    private function resolveTreeBuilderInstantiation(SourceFile $source, Node $scope, CallExpression $getRootCall): ?Node
+    private static function isScopeBoundary(NodeKind $kind): bool
     {
-        $receiver = $this->unwrap($source, $getRootCall->receiver);
+        return $kind === NodeKind::Method
+            || $kind === NodeKind::Function
+            || $kind === NodeKind::Closure
+            || $kind === NodeKind::ArrowFunction;
+    }
+
+    private function resolveTreeBuilderInstantiation(SourceFile $source, Node $scope, Node $getRootCall): ?Node
+    {
+        $receiver = $this->unwrap($source, $source->getChildren($getRootCall)[0] ?? null);
         if ($receiver === null) {
             return null;
         }
@@ -142,27 +196,47 @@ final class TreeBuilderRootNodeHook implements MethodCallAnalysisHook
             return null;
         }
 
+        $contents = $source->contents;
+        $varLen = strlen($varName);
+        $callStart = $getRootCall->span->start;
+        $firstHit = strpos($contents, $varName, $scope->span->start);
+        if ($firstHit === false || $firstHit + $varLen > $callStart) {
+            return null;
+        }
+
         $latest = null;
-        foreach ($source->getDescendants($scope, NodeKind::Assignment) as $assignment) {
-            if ($assignment->span->start >= $getRootCall->node->span->start) {
-                break;
-            }
+        $stack = [];
+        $scopeChildren = $source->getChildren($scope);
+        for ($i = count($scopeChildren) - 1; $i >= 0; --$i) {
+            $stack[] = $scopeChildren[$i];
+        }
 
-            if ($this->enclosingScope($source, $assignment)->id !== $scope->id) {
+        while (($node = array_pop($stack)) !== null) {
+            $span = $node->span;
+            if ($span->start >= $callStart || self::isScopeBoundary($node->kind)) {
                 continue;
             }
 
-            $children = $source->getChildren($assignment);
-            $lhs = $children[0] ?? null;
-            $rhs = $children !== [] ? $children[array_key_last($children)] : null;
-            if ($lhs === null || $this->directVariableName($source, $lhs) !== $varName) {
+            $hit = strpos($contents, $varName, $span->start);
+            if ($hit === false || $hit + $varLen > $span->end) {
                 continue;
             }
 
-            $rhsUnwrapped = $this->unwrap($source, $rhs);
-            $latest = ($rhsUnwrapped !== null && $this->isTreeBuilderInstantiation($source, $rhsUnwrapped))
-                ? $rhsUnwrapped
-                : null;
+            $children = $source->getChildren($node);
+            if ($node->kind === NodeKind::Assignment) {
+                $lhs = $children[0] ?? null;
+                if ($lhs !== null && $this->directVariableName($source, $lhs) === $varName) {
+                    $rhs = $children !== [] ? $children[array_key_last($children)] : null;
+                    $rhsUnwrapped = $this->unwrap($source, $rhs);
+                    $latest = ($rhsUnwrapped !== null && $this->isTreeBuilderInstantiation($source, $rhsUnwrapped))
+                        ? $rhsUnwrapped
+                        : null;
+                }
+            }
+
+            for ($i = count($children) - 1; $i >= 0; --$i) {
+                $stack[] = $children[$i];
+            }
         }
 
         return $latest;
@@ -193,7 +267,7 @@ final class TreeBuilderRootNodeHook implements MethodCallAnalysisHook
                 $resolved = $source->getResolvedName($unwrapped)?->name;
                 $name = $resolved !== null ? ltrim($resolved, '\\') : ltrim($source->getText($unwrapped), '\\');
 
-                return strtolower($name) === strtolower(self::TREE_BUILDER);
+                return strtolower($name) === self::LOWER_TREE_BUILDER;
             }
         }
 
@@ -202,7 +276,14 @@ final class TreeBuilderRootNodeHook implements MethodCallAnalysisHook
 
     private function extractTreeBuilderType(SourceFile $source, Node $instantiation): ?string
     {
-        $argumentList = $source->getFirstDescendant($instantiation, NodeKind::ArgumentList);
+        $argumentList = null;
+        foreach ($source->getChildren($instantiation) as $child) {
+            if ($child->kind === NodeKind::ArgumentList) {
+                $argumentList = $child;
+                break;
+            }
+        }
+        $argumentList ??= $source->getFirstDescendant($instantiation, NodeKind::ArgumentList);
         if ($argumentList === null) {
             return null;
         }
@@ -215,9 +296,10 @@ final class TreeBuilderRootNodeHook implements MethodCallAnalysisHook
             }
 
             if ($variant->kind === NodeKind::PositionalArgument) {
-                $value = $source->getChildren($variant)[0] ?? null;
-                if ($positionalIndex === 1 && $value !== null) {
-                    return $this->extractLiteralString($source, $value);
+                if ($positionalIndex === 1) {
+                    $value = $source->getChildren($variant)[0] ?? null;
+
+                    return $value !== null ? $this->extractLiteralString($source, $value) : null;
                 }
                 $positionalIndex++;
                 continue;
@@ -277,29 +359,49 @@ final class TreeBuilderRootNodeHook implements MethodCallAnalysisHook
         string $actualNodeClass,
         string $nodeType,
     ): void {
-        foreach ($source->getDescendants($scope) as $node) {
-            if ($node->span->start <= $afterOffset || $this->enclosingScope($source, $node)->id !== $scope->id) {
+        $contents = $source->contents;
+        $varLen = strlen($varName);
+        $firstHit = strpos($contents, $varName, $afterOffset);
+        if ($firstHit === false || $firstHit + $varLen > $scope->span->end) {
+            return;
+        }
+
+        $stack = [];
+        $scopeChildren = $source->getChildren($scope);
+        for ($i = count($scopeChildren) - 1; $i >= 0; --$i) {
+            $stack[] = $scopeChildren[$i];
+        }
+
+        while (($node = array_pop($stack)) !== null) {
+            $span = $node->span;
+            if ($span->end <= $afterOffset || self::isScopeBoundary($node->kind)) {
                 continue;
             }
 
-            if ($node->kind === NodeKind::Assignment) {
-                $lhs = $source->getChildren($node)[0] ?? null;
-                if ($this->directVariableName($source, $lhs) === $varName) {
-                    break;
+            $searchFrom = $span->start > $afterOffset ? $span->start : $afterOffset;
+            $hit = strpos($contents, $varName, $searchFrom);
+            if ($hit === false || $hit + $varLen > $span->end) {
+                continue;
+            }
+
+            $children = $source->getChildren($node);
+            if ($span->start > $afterOffset) {
+                if ($node->kind === NodeKind::Assignment) {
+                    $lhs = $children[0] ?? null;
+                    if ($this->directVariableName($source, $lhs) === $varName) {
+                        break;
+                    }
+                } elseif ($node->kind === NodeKind::MethodCall) {
+                    if ($this->directVariableName($source, $children[0] ?? null) === $varName) {
+                        if ($this->checkSingleMethodCall($context, $source, $node, $children[1] ?? null, $actualNodeClass, $nodeType)) {
+                            $this->checkChainFromExpression($context, $source, $node, $actualNodeClass, $nodeType);
+                        }
+                    }
                 }
             }
 
-            if ($node->kind !== NodeKind::MethodCall) {
-                continue;
-            }
-
-            $callExpr = CallExpression::fromNode($source, $node);
-            if ($this->directVariableName($source, $callExpr->receiver) !== $varName) {
-                continue;
-            }
-
-            if ($this->checkSingleMethodCall($context, $source, $callExpr, $actualNodeClass, $nodeType)) {
-                $this->checkChainFromExpression($context, $source, $node, $actualNodeClass, $nodeType);
+            for ($i = count($children) - 1; $i >= 0; --$i) {
+                $stack[] = $children[$i];
             }
         }
     }
@@ -318,13 +420,13 @@ final class TreeBuilderRootNodeHook implements MethodCallAnalysisHook
                 break;
             }
 
-            $callExpr = CallExpression::fromNode($source, $parent);
-            $receiver = $this->unwrap($source, $callExpr->receiver);
+            $children = $source->getChildren($parent);
+            $receiver = $this->unwrap($source, $children[0] ?? null);
             if ($receiver === null || $receiver->id !== $current->id) {
                 break;
             }
 
-            if (!$this->checkSingleMethodCall($context, $source, $callExpr, $actualNodeClass, $nodeType)) {
+            if (!$this->checkSingleMethodCall($context, $source, $parent, $children[1] ?? null, $actualNodeClass, $nodeType)) {
                 break;
             }
 
@@ -335,23 +437,28 @@ final class TreeBuilderRootNodeHook implements MethodCallAnalysisHook
     private function checkSingleMethodCall(
         NodeAnalysisContext $context,
         SourceFile $source,
-        CallExpression $callExpr,
+        Node $callNode,
+        ?Node $member,
         string $actualNodeClass,
         string $nodeType,
     ): bool {
-        $methodName = $callExpr->getName($source);
-        if ($methodName === null) {
+        if ($member === null) {
             return false;
         }
 
+        $selector = $source->getChildren($member)[0] ?? null;
+        if ($selector === null || $selector->kind !== NodeKind::LocalIdentifier) {
+            return false;
+        }
+
+        $methodName = $source->getText($selector);
         if (!$context->codebase->methodExists($actualNodeClass, $methodName)) {
-            $span = $callExpr->member?->span ?? $callExpr->node->span;
             $context->report(
                 Level::Error,
                 'invalid-root-node-method',
                 Issue::at(
                     "Method `{$methodName}` does not exist on type `{$actualNodeClass}` (root node type `{$nodeType}`).",
-                    new SourceLocation($context->analysis->file, $span),
+                    new SourceLocation($context->analysis->file, $member->span),
                 ),
             );
 
