@@ -31,6 +31,14 @@ final class ContainerGetReturnTypeProvider implements MethodReturnTypeProvider
     private const FLAG_BUILDER_ONLY = 2;
     private const FLAG_NEVER_THROWS = 3;
 
+    private const EXACT_NON_BUILDER_CONTAINERS = [
+        'Symfony\\Component\\DependencyInjection\\Container' => true,
+        'Symfony\\Component\\DependencyInjection\\ContainerInterface' => true,
+        'Psr\\Container\\ContainerInterface' => true,
+        'Symfony\\Component\\DependencyInjection\\ServiceLocator' => true,
+        'Symfony\\Contracts\\Service\\ServiceProviderInterface' => true,
+    ];
+
     private const NON_BUILDER_CONTAINERS = [
         'symfony\\component\\dependencyinjection\\container' => true,
         'symfony\\component\\dependencyinjection\\containerinterface' => true,
@@ -143,7 +151,16 @@ final class ContainerGetReturnTypeProvider implements MethodReturnTypeProvider
         if (count($receiver->atomicTypes) === 1) {
             $atomic = $receiver->atomicTypes[0];
             if ($atomic instanceof NamedObjectType && $atomic->intersections === null) {
-                $lower = strtolower($atomic->name);
+                $name = $atomic->name;
+                if ($name === self::CONTAINER_BUILDER) {
+                    return true;
+                }
+
+                if (isset(self::EXACT_NON_BUILDER_CONTAINERS[$name])) {
+                    return false;
+                }
+
+                $lower = strtolower($name);
                 if ($lower === self::LOWER_CONTAINER_BUILDER) {
                     return true;
                 }
@@ -152,8 +169,8 @@ final class ContainerGetReturnTypeProvider implements MethodReturnTypeProvider
                     return false;
                 }
 
-                foreach ($context->codebase->getClassAncestors($atomic->name) as $ancestor) {
-                    if (strtolower($ancestor) === self::LOWER_CONTAINER_BUILDER) {
+                foreach ($context->codebase->getClassAncestors($name) as $ancestor) {
+                    if ($ancestor === self::CONTAINER_BUILDER || strtolower($ancestor) === self::LOWER_CONTAINER_BUILDER) {
                         return true;
                     }
                 }

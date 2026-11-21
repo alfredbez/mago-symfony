@@ -8,7 +8,6 @@ use Mago\Sdk\Analyzer\MethodReturnTypeProvider;
 use Mago\Sdk\Analyzer\MethodTarget;
 use Mago\Sdk\Analyzer\ReturnTypeProviderContext;
 use Mago\Sdk\Analyzer\Type;
-use Mago\Sdk\Analyzer\Type\NamedObjectType;
 
 /**
  * TreeBuilder::getRootNode() declares `NodeDefinition|ArrayNodeDefinition`.
@@ -23,6 +22,8 @@ final class RootNodeReturnTypeProvider implements MethodReturnTypeProvider
     private const TREE_BUILDER = 'Symfony\\Component\\Config\\Definition\\Builder\\TreeBuilder';
     private const ARRAY_NODE_DEFINITION = 'Symfony\\Component\\Config\\Definition\\Builder\\ArrayNodeDefinition';
 
+    private ?Type $defaultTreeBuilderType = null;
+
     public function getTargets(): array
     {
         return [
@@ -36,16 +37,9 @@ final class RootNodeReturnTypeProvider implements MethodReturnTypeProvider
             return null;
         }
 
-        $parent = $context->invocation->receiverType ?? Type::namedObject(self::TREE_BUILDER);
+        $parent = $context->invocation->receiverType
+            ?? ($this->defaultTreeBuilderType ??= Type::namedObject(self::TREE_BUILDER));
 
-        return Type::fromAtomic(new NamedObjectType(
-            name: self::ARRAY_NODE_DEFINITION,
-            parameters: [$parent],
-            variances: null,
-            static: false,
-            isThis: false,
-            intersections: null,
-            remappedParameters: false,
-        ));
+        return Type::namedObject(self::ARRAY_NODE_DEFINITION, $parent);
     }
 }

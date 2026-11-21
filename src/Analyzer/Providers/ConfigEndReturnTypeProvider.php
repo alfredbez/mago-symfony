@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace AlfredBez\MagoSymfony\Analyzer\Providers;
 
-use Mago\Sdk\Analyzer\Codebase;
 use Mago\Sdk\Analyzer\MethodReturnTypeProvider;
 use Mago\Sdk\Analyzer\MethodTarget;
 use Mago\Sdk\Analyzer\ReturnTypeProviderContext;
@@ -31,6 +30,11 @@ final class ConfigEndReturnTypeProvider implements MethodReturnTypeProvider
     private const EXPR_BUILDER = self::NS . 'ExprBuilder';
     private const MERGE_BUILDER = self::NS . 'MergeBuilder';
 
+    private const LOWER_NODE_BUILDER = 'symfony\\component\\config\\definition\\builder\\nodebuilder';
+    private const LOWER_NODE_DEFINITION = 'symfony\\component\\config\\definition\\builder\\nodedefinition';
+    private const LOWER_EXPR_BUILDER = 'symfony\\component\\config\\definition\\builder\\exprbuilder';
+    private const LOWER_MERGE_BUILDER = 'symfony\\component\\config\\definition\\builder\\mergebuilder';
+
     private const NODE_TYPE_MAP = [
         'variable' => self::NS . 'VariableNodeDefinition',
         'scalar' => self::NS . 'ScalarNodeDefinition',
@@ -39,6 +43,28 @@ final class ConfigEndReturnTypeProvider implements MethodReturnTypeProvider
         'float' => self::NS . 'FloatNodeDefinition',
         'array' => self::ARRAY_NODE_DEFINITION,
         'enum' => self::NS . 'EnumNodeDefinition',
+    ];
+
+    private const BUILTIN_NODE_DEFINITIONS = [
+        self::NODE_DEFINITION => true,
+        self::ARRAY_NODE_DEFINITION => true,
+        self::NS . 'ScalarNodeDefinition' => true,
+        self::NS . 'BooleanNodeDefinition' => true,
+        self::NS . 'IntegerNodeDefinition' => true,
+        self::NS . 'FloatNodeDefinition' => true,
+        self::NS . 'EnumNodeDefinition' => true,
+        self::NS . 'VariableNodeDefinition' => true,
+    ];
+
+    private const LOWER_BUILTIN_NODE_DEFINITIONS = [
+        self::LOWER_NODE_DEFINITION => true,
+        'symfony\\component\\config\\definition\\builder\\arraynodedefinition' => true,
+        'symfony\\component\\config\\definition\\builder\\scalarnodedefinition' => true,
+        'symfony\\component\\config\\definition\\builder\\booleannodedefinition' => true,
+        'symfony\\component\\config\\definition\\builder\\integernodedefinition' => true,
+        'symfony\\component\\config\\definition\\builder\\floatnodedefinition' => true,
+        'symfony\\component\\config\\definition\\builder\\enumnodedefinition' => true,
+        'symfony\\component\\config\\definition\\builder\\variablenodedefinition' => true,
     ];
 
     private const BUILDER_NODE_METHODS = [
@@ -60,6 +86,12 @@ final class ConfigEndReturnTypeProvider implements MethodReturnTypeProvider
         'scalarprototype' => self::NODE_TYPE_MAP['scalar'],
         'variableprototype' => self::NODE_TYPE_MAP['variable'],
     ];
+
+    private ?Type $nullType = null;
+    private ?Type $nullableArrayNodeType = null;
+
+    /** @var array<string, Type> */
+    private array $plainTypes = [];
 
     public function getTargets(): array
     {
@@ -88,68 +120,95 @@ final class ConfigEndReturnTypeProvider implements MethodReturnTypeProvider
 
     public function getReturnType(ReturnTypeProviderContext $context): ?Type
     {
-        $method = strtolower($context->invocation->name);
         $receiver = $context->invocation->receiverType;
+        $name = $context->invocation->name;
 
-        if ($method === 'end') {
-            return $this->resolveEnd($context, $receiver);
+        return match ($name) {
+            'end' => $this->resolveEnd($context, $receiver),
+            'children' => $this->withParent(self::NODE_BUILDER, $receiver),
+            'validate', 'beforeNormalization' => $this->withParent(self::EXPR_BUILDER, $receiver),
+            'prototype' => $this->resolvePrototype($context, $receiver),
+            'node' => $this->resolveDynamicNode($context, $receiver),
+            'arrayNode' => $this->resolveBuilderNode($context, self::ARRAY_NODE_DEFINITION, $receiver),
+            'booleanNode' => $this->resolveBuilderNode($context, self::NODE_TYPE_MAP['boolean'], $receiver),
+            'enumNode' => $this->resolveBuilderNode($context, self::NODE_TYPE_MAP['enum'], $receiver),
+            'floatNode' => $this->resolveBuilderNode($context, self::NODE_TYPE_MAP['float'], $receiver),
+            'integerNode' => $this->resolveBuilderNode($context, self::NODE_TYPE_MAP['integer'], $receiver),
+            'scalarNode' => $this->resolveBuilderNode($context, self::NODE_TYPE_MAP['scalar'], $receiver),
+            'variableNode' => $this->resolveBuilderNode($context, self::NODE_TYPE_MAP['variable'], $receiver),
+            'arrayPrototype' => $this->resolvePrototypeShortcut($context, self::ARRAY_NODE_DEFINITION, $receiver),
+            'booleanPrototype' => $this->resolvePrototypeShortcut($context, self::NODE_TYPE_MAP['boolean'], $receiver),
+            'enumPrototype' => $this->resolvePrototypeShortcut($context, self::NODE_TYPE_MAP['enum'], $receiver),
+            'floatPrototype' => $this->resolvePrototypeShortcut($context, self::NODE_TYPE_MAP['float'], $receiver),
+            'integerPrototype' => $this->resolvePrototypeShortcut($context, self::NODE_TYPE_MAP['integer'], $receiver),
+            'scalarPrototype' => $this->resolvePrototypeShortcut($context, self::NODE_TYPE_MAP['scalar'], $receiver),
+            'variablePrototype' => $this->resolvePrototypeShortcut($context, self::NODE_TYPE_MAP['variable'], $receiver),
+            default => $this->dispatchNormalizedMethod($context, strtolower($name), $receiver),
+        };
+    }
+
+    private function dispatchNormalizedMethod(ReturnTypeProviderContext $context, string $method, ?Type $receiver): ?Type
+    {
+        return match ($method) {
+            'end' => $this->resolveEnd($context, $receiver),
+            'children' => $this->withParent(self::NODE_BUILDER, $receiver),
+            'validate', 'beforenormalization' => $this->withParent(self::EXPR_BUILDER, $receiver),
+            'prototype' => $this->resolvePrototype($context, $receiver),
+            'node' => $this->resolveDynamicNode($context, $receiver),
+            default => match (true) {
+                isset(self::BUILDER_NODE_METHODS[$method]) => $this->resolveBuilderNode($context, self::BUILDER_NODE_METHODS[$method], $receiver),
+                isset(self::PROTOTYPE_SHORTCUTS[$method]) => $this->resolvePrototypeShortcut($context, self::PROTOTYPE_SHORTCUTS[$method], $receiver),
+                default => null,
+            },
+        };
+    }
+
+    private function resolvePrototype(ReturnTypeProviderContext $context, ?Type $receiver): ?Type
+    {
+        $typeArg = $context->invocation->getArgument(0, 'type')?->type?->getLiteralString();
+        if ($typeArg === null) {
+            return null;
         }
 
-        if ($method === 'children') {
-            return $this->withParent(self::NODE_BUILDER, $receiver);
+        $nodeClass = self::NODE_TYPE_MAP[$typeArg] ?? self::NODE_TYPE_MAP[strtolower($typeArg)] ?? null;
+        if ($nodeClass === null || !$context->codebase->classExists($nodeClass)) {
+            return null;
         }
 
-        if ($method === 'validate' || $method === 'beforenormalization') {
-            return $this->withParent(self::EXPR_BUILDER, $receiver);
+        return $this->withParent($nodeClass, $receiver);
+    }
+
+    private function resolvePrototypeShortcut(ReturnTypeProviderContext $context, string $nodeClass, ?Type $receiver): ?Type
+    {
+        if (!$context->codebase->classExists($nodeClass)) {
+            return null;
         }
 
-        if ($method === 'prototype') {
-            $typeArg = $context->invocation->getArgument(0, 'type')?->type?->getLiteralString();
-            if ($typeArg === null) {
-                return null;
-            }
+        return $this->withParent($nodeClass, $receiver);
+    }
 
-            $nodeClass = self::NODE_TYPE_MAP[strtolower($typeArg)] ?? null;
-            if ($nodeClass === null || !$context->codebase->classExists($nodeClass)) {
-                return null;
-            }
-
-            return $this->withParent($nodeClass, $receiver);
+    private function resolveDynamicNode(ReturnTypeProviderContext $context, ?Type $receiver): ?Type
+    {
+        $typeArg = $context->invocation->getArgument(1, 'type')?->type?->getLiteralString();
+        if ($typeArg === null) {
+            return null;
         }
 
-        if (isset(self::PROTOTYPE_SHORTCUTS[$method])) {
-            $nodeClass = self::PROTOTYPE_SHORTCUTS[$method];
-            if (!$context->codebase->classExists($nodeClass)) {
-                return null;
-            }
-
-            return $this->withParent($nodeClass, $receiver);
+        $nodeClass = self::NODE_TYPE_MAP[$typeArg] ?? self::NODE_TYPE_MAP[strtolower($typeArg)] ?? null;
+        if ($nodeClass === null || !$context->codebase->classExists($nodeClass)) {
+            return null;
         }
 
-        if ($method === 'node') {
-            $typeArg = $context->invocation->getArgument(1, 'type')?->type?->getLiteralString();
-            if ($typeArg === null) {
-                return null;
-            }
+        return $this->withParent($nodeClass, $this->nodeParent($receiver));
+    }
 
-            $nodeClass = self::NODE_TYPE_MAP[strtolower($typeArg)] ?? null;
-            if ($nodeClass === null || !$context->codebase->classExists($nodeClass)) {
-                return null;
-            }
-
-            return $this->withParent($nodeClass, $this->nodeParent($receiver));
+    private function resolveBuilderNode(ReturnTypeProviderContext $context, string $nodeClass, ?Type $receiver): ?Type
+    {
+        if (!$context->codebase->classExists($nodeClass)) {
+            return null;
         }
 
-        if (isset(self::BUILDER_NODE_METHODS[$method])) {
-            $nodeClass = self::BUILDER_NODE_METHODS[$method];
-            if (!$context->codebase->classExists($nodeClass)) {
-                return null;
-            }
-
-            return $this->withParent($nodeClass, $this->nodeParent($receiver));
-        }
-
-        return null;
+        return $this->withParent($nodeClass, $this->nodeParent($receiver));
     }
 
     private function nodeParent(?Type $builder): ?Type
@@ -159,7 +218,7 @@ final class ConfigEndReturnTypeProvider implements MethodReturnTypeProvider
         }
 
         // NodeBuilder::append() sets the child's parent only when the builder has a parent.
-        return Type::union($builder, Type::null());
+        return Type::union($builder, $this->nullType ??= Type::null());
     }
 
     private function resolveEnd(ReturnTypeProviderContext $context, ?Type $receiver): ?Type
@@ -170,34 +229,68 @@ final class ConfigEndReturnTypeProvider implements MethodReturnTypeProvider
         }
 
         $declaring = $context->invocation->declaringClass;
-        if ($declaring !== null && $this->isOrExtends($context->codebase, $declaring, self::NODE_BUILDER)) {
-            return Type::union(Type::namedObject(self::ARRAY_NODE_DEFINITION), Type::null());
+        if ($declaring === null) {
+            return null;
         }
 
-        // Calling end() directly on an unparented NodeDefinition (e.g. past the root node
-        // or on a standalone `new ArrayNodeDefinition()`) yields null at runtime.
-        if ($declaring !== null && $this->isOrExtends($context->codebase, $declaring, self::NODE_DEFINITION)) {
-            return Type::null();
+        if ($declaring === self::NODE_BUILDER) {
+            return $this->nullableArrayNodeType();
+        }
+
+        if (isset(self::BUILTIN_NODE_DEFINITIONS[$declaring])) {
+            return $this->nullType ??= Type::null();
+        }
+
+        if ($declaring === self::EXPR_BUILDER || $declaring === self::MERGE_BUILDER) {
+            return null;
+        }
+
+        $lowerDeclaring = strtolower($declaring);
+        if ($lowerDeclaring === self::LOWER_NODE_BUILDER) {
+            return $this->nullableArrayNodeType();
+        }
+
+        if (isset(self::LOWER_BUILTIN_NODE_DEFINITIONS[$lowerDeclaring])) {
+            return $this->nullType ??= Type::null();
+        }
+
+        if ($lowerDeclaring === self::LOWER_EXPR_BUILDER || $lowerDeclaring === self::LOWER_MERGE_BUILDER) {
+            return null;
+        }
+
+        $extendsNodeDefinition = false;
+        foreach ($context->codebase->getClassAncestors($declaring) as $ancestor) {
+            $lowerAncestor = strtolower($ancestor);
+            if ($lowerAncestor === self::LOWER_NODE_BUILDER) {
+                return $this->nullableArrayNodeType();
+            }
+            if ($lowerAncestor === self::LOWER_NODE_DEFINITION) {
+                $extendsNodeDefinition = true;
+            }
+        }
+
+        if ($extendsNodeDefinition) {
+            return $this->nullType ??= Type::null();
         }
 
         return null;
     }
 
+    private function nullableArrayNodeType(): Type
+    {
+        return $this->nullableArrayNodeType ??= Type::union(
+            $this->plainTypes[self::ARRAY_NODE_DEFINITION] ??= Type::namedObject(self::ARRAY_NODE_DEFINITION),
+            $this->nullType ??= Type::null(),
+        );
+    }
+
     private function withParent(string $class, ?Type $parent): Type
     {
         if ($parent === null) {
-            return Type::namedObject($class);
+            return $this->plainTypes[$class] ??= Type::namedObject($class);
         }
 
-        return Type::fromAtomic(new NamedObjectType(
-            name: $class,
-            parameters: [$parent],
-            variances: null,
-            static: false,
-            isThis: false,
-            intersections: null,
-            remappedParameters: false,
-        ));
+        return Type::namedObject($class, $parent);
     }
 
     private function extractParent(?Type $type): ?Type
@@ -213,21 +306,5 @@ final class ConfigEndReturnTypeProvider implements MethodReturnTypeProvider
         }
 
         return null;
-    }
-
-    private function isOrExtends(Codebase $codebase, string $class, string $target): bool
-    {
-        $lowerTarget = strtolower($target);
-        if (strtolower($class) === $lowerTarget) {
-            return true;
-        }
-
-        foreach ($codebase->getClassAncestors($class) as $ancestor) {
-            if (strtolower($ancestor) === $lowerTarget) {
-                return true;
-            }
-        }
-
-        return false;
     }
 }
