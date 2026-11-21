@@ -27,6 +27,7 @@ final class SymfonyPlugin implements Plugin
 
     public function register(PluginRegistry $registry): void
     {
+        $registry->enableProviderMemoization();
         $registry->registerMethodReturnTypeProvider(new ContainerGetReturnTypeProvider(ServiceClassMap::fromEnvironment()));
         $registry->registerMethodReturnTypeProvider(new RootNodeReturnTypeProvider());
         $registry->registerMethodReturnTypeProvider(new ConfigEndReturnTypeProvider());
