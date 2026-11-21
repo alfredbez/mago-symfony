@@ -38,9 +38,6 @@ final class ConfigEndReturnTypeProvider implements MethodReturnTypeProvider
     private const MERGE_BUILDER = self::NS . 'MergeBuilder';
 
     private const LOWER_NODE_BUILDER = 'symfony\\component\\config\\definition\\builder\\nodebuilder';
-    private const LOWER_NODE_DEFINITION = 'symfony\\component\\config\\definition\\builder\\nodedefinition';
-    private const LOWER_EXPR_BUILDER = 'symfony\\component\\config\\definition\\builder\\exprbuilder';
-    private const LOWER_MERGE_BUILDER = 'symfony\\component\\config\\definition\\builder\\mergebuilder';
 
     private const NODE_TYPE_MAP = [
         'variable' => self::NS . 'VariableNodeDefinition',
@@ -63,18 +60,6 @@ final class ConfigEndReturnTypeProvider implements MethodReturnTypeProvider
         self::NS . 'FloatNodeDefinition' => true,
         self::NS . 'EnumNodeDefinition' => true,
         self::NS . 'VariableNodeDefinition' => true,
-    ];
-
-    private const LOWER_BUILTIN_NODE_DEFINITIONS = [
-        self::LOWER_NODE_DEFINITION => true,
-        'symfony\\component\\config\\definition\\builder\\arraynodedefinition' => true,
-        'symfony\\component\\config\\definition\\builder\\scalarnodedefinition' => true,
-        'symfony\\component\\config\\definition\\builder\\stringnodedefinition' => true,
-        'symfony\\component\\config\\definition\\builder\\booleannodedefinition' => true,
-        'symfony\\component\\config\\definition\\builder\\integernodedefinition' => true,
-        'symfony\\component\\config\\definition\\builder\\floatnodedefinition' => true,
-        'symfony\\component\\config\\definition\\builder\\enumnodedefinition' => true,
-        'symfony\\component\\config\\definition\\builder\\variablenodedefinition' => true,
     ];
 
     private const BUILDER_NODE_METHODS = [
@@ -107,6 +92,8 @@ final class ConfigEndReturnTypeProvider implements MethodReturnTypeProvider
 
     /** @var array<string, bool> */
     private array $nodeBuilderClassCache = [];
+
+    private bool $hasCustomNodeMappings = false;
 
     public function getTargets(): array
     {
@@ -198,16 +185,23 @@ final class ConfigEndReturnTypeProvider implements MethodReturnTypeProvider
 
     private function resolveChildren(ReturnTypeProviderContext $context, ?Type $receiver): Type
     {
-        $parent = $this->extractParent($receiver);
-        if ($parent !== null) {
-            $parentObject = $this->firstNamedObject($parent);
-            if ($parentObject !== null && $this->isNodeBuilderClass($context, $parentObject->name)) {
-                $mappings = $parentObject->parameters[1] ?? null;
-                if ($mappings !== null && $receiver !== null) {
-                    return Type::namedObject($parentObject->name, $receiver, $mappings);
-                }
+        if ($receiver !== null) {
+            $parent = $this->extractParent($receiver);
+            if ($parent !== null) {
+                $parentObject = $parent->atomicTypes[0] ?? null;
+                if (
+                    $parentObject instanceof NamedObjectType
+                    && $parentObject->name !== self::TREE_BUILDER
+                    && !isset(self::BUILTIN_NODE_DEFINITIONS[$parentObject->name])
+                    && $this->isNodeBuilderClass($context, $parentObject->name)
+                ) {
+                    $mappings = $parentObject->parameters[1] ?? null;
+                    if ($mappings !== null) {
+                        return Type::namedObject($parentObject->name, $receiver, $mappings);
+                    }
 
-                return $this->withParent($parentObject->name, $receiver);
+                    return $this->withParent($parentObject->name, $receiver);
+                }
             }
         }
 
@@ -236,6 +230,7 @@ final class ConfigEndReturnTypeProvider implements MethodReturnTypeProvider
 
         $mappings = $this->extractNodeMappings($receiver);
         $mappings[strtolower($typeArg)] = $nodeClass;
+        $this->hasCustomNodeMappings = true;
 
         $parentParam = $builderObject->parameters[0] ?? $this->nullableArrayNodeType();
 
@@ -269,11 +264,11 @@ final class ConfigEndReturnTypeProvider implements MethodReturnTypeProvider
             return null;
         }
 
-        $lowerType = strtolower($typeArg);
-        $nodeClass = $this->extractNodeMapping($this->extractParent($receiver), $lowerType)
-            ?? self::NODE_TYPE_MAP[$typeArg]
-            ?? self::NODE_TYPE_MAP[$lowerType]
-            ?? null;
+        $nodeClass = null;
+        if ($this->hasCustomNodeMappings) {
+            $nodeClass = $this->extractNodeMapping($this->extractParent($receiver), strtolower($typeArg));
+        }
+        $nodeClass ??= self::NODE_TYPE_MAP[$typeArg] ?? self::NODE_TYPE_MAP[strtolower($typeArg)] ?? null;
         if ($nodeClass === null || !$context->codebase->classExists($nodeClass)) {
             return null;
         }
@@ -287,7 +282,9 @@ final class ConfigEndReturnTypeProvider implements MethodReturnTypeProvider
         string $defaultNodeClass,
         ?Type $receiver,
     ): ?Type {
-        $nodeClass = $this->extractNodeMapping($this->extractParent($receiver), $nodeType) ?? $defaultNodeClass;
+        $nodeClass = $this->hasCustomNodeMappings
+            ? ($this->extractNodeMapping($this->extractParent($receiver), $nodeType) ?? $defaultNodeClass)
+            : $defaultNodeClass;
         if (!$context->codebase->classExists($nodeClass)) {
             return null;
         }
@@ -302,11 +299,11 @@ final class ConfigEndReturnTypeProvider implements MethodReturnTypeProvider
             return null;
         }
 
-        $lowerType = strtolower($typeArg);
-        $nodeClass = $this->extractNodeMapping($receiver, $lowerType)
-            ?? self::NODE_TYPE_MAP[$typeArg]
-            ?? self::NODE_TYPE_MAP[$lowerType]
-            ?? null;
+        $nodeClass = null;
+        if ($this->hasCustomNodeMappings) {
+            $nodeClass = $this->extractNodeMapping($receiver, strtolower($typeArg));
+        }
+        $nodeClass ??= self::NODE_TYPE_MAP[$typeArg] ?? self::NODE_TYPE_MAP[strtolower($typeArg)] ?? null;
         if ($nodeClass === null || !$context->codebase->classExists($nodeClass)) {
             return null;
         }
@@ -320,7 +317,9 @@ final class ConfigEndReturnTypeProvider implements MethodReturnTypeProvider
         string $defaultNodeClass,
         ?Type $receiver,
     ): ?Type {
-        $nodeClass = $this->extractNodeMapping($receiver, $nodeType) ?? $defaultNodeClass;
+        $nodeClass = $this->hasCustomNodeMappings
+            ? ($this->extractNodeMapping($receiver, $nodeType) ?? $defaultNodeClass)
+            : $defaultNodeClass;
         if (!$context->codebase->classExists($nodeClass)) {
             return null;
         }
@@ -377,50 +376,17 @@ final class ConfigEndReturnTypeProvider implements MethodReturnTypeProvider
         }
 
         $declaring = $context->invocation->declaringClass;
-        if ($declaring === null) {
+        if ($declaring === null || isset(self::BUILTIN_NODE_DEFINITIONS[$declaring])) {
             return null;
         }
 
-        if ($declaring === self::NODE_BUILDER) {
+        if ($declaring === self::NODE_BUILDER || $this->isNodeBuilderClass($context, $declaring)) {
             return $this->nullableArrayNodeType();
         }
 
-        if (isset(self::BUILTIN_NODE_DEFINITIONS[$declaring])) {
-            return $this->nullType ??= Type::null();
-        }
-
-        if ($declaring === self::EXPR_BUILDER || $declaring === self::MERGE_BUILDER) {
-            return null;
-        }
-
-        $lowerDeclaring = strtolower($declaring);
-        if ($lowerDeclaring === self::LOWER_NODE_BUILDER) {
-            return $this->nullableArrayNodeType();
-        }
-
-        if (isset(self::LOWER_BUILTIN_NODE_DEFINITIONS[$lowerDeclaring])) {
-            return $this->nullType ??= Type::null();
-        }
-
-        if ($lowerDeclaring === self::LOWER_EXPR_BUILDER || $lowerDeclaring === self::LOWER_MERGE_BUILDER) {
-            return null;
-        }
-
-        $extendsNodeDefinition = false;
-        foreach ($context->codebase->getClassAncestors($declaring) as $ancestor) {
-            $lowerAncestor = strtolower($ancestor);
-            if ($lowerAncestor === self::LOWER_NODE_BUILDER) {
-                return $this->nullableArrayNodeType();
-            }
-            if ($lowerAncestor === self::LOWER_NODE_DEFINITION) {
-                $extendsNodeDefinition = true;
-            }
-        }
-
-        if ($extendsNodeDefinition) {
-            return $this->nullType ??= Type::null();
-        }
-
+        // Untracked NodeDefinition/ExprBuilder/MergeBuilder receivers may be externally parented
+        // parameters (e.g. SecurityBundle's CustomAuthenticatorFactory::addConfiguration()); delegate
+        // to Symfony's declared return type instead of fabricating null.
         return null;
     }
 

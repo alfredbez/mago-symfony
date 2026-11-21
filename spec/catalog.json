@@ -170,8 +170,8 @@
         "symfony-node-builder"
       ],
       "fixture": "<?php function unparented(): void { (new \\Symfony\\Component\\Config\\Definition\\Builder\\NodeBuilder())->end(); }",
-      "semantics": "A standalone NodeBuilder and a node produced by that unparented builder end at null. A provider cannot distinguish an unknown externally parented builder from a standalone one.",
-      "analyzer_expectation": "Preserve nullable fallback for untracked builders and their children. Tracked children() chains stay precise.",
+      "semantics": "A standalone NodeBuilder and a node produced by that unparented builder end at null. A provider cannot distinguish an unknown externally parented builder or NodeDefinition parameter from a standalone one on Symfony 6.4/7.2 (before @template TParent = null).",
+      "analyzer_expectation": "Preserve nullable fallback for untracked builders and their children; delegate untracked NodeDefinition::end() to Symfony's declared return type instead of fabricating null (preventing false method-access-on-null on externally parented parameters such as SecurityBundle CustomAuthenticatorFactory). Tracked children() chains and Symfony 7 ArrayNodeDefinition<null> stay precise.",
       "negative_control": "Dereference end() on a standalone builder or its scalar node. The original custom builder fixture no longer assumes a fabricated array parent.",
       "priority": "P0",
       "versions": "Mago 1.60.2; Symfony Config 6.4.50, DependencyInjection 6.4.49, service-contracts 3.8.1, psr/container 2.0.2. Runtime and analyzer checks passed on PHP 8.3 and 8.4; matching CI configured. PHPStan and Psalm themselves were not executed.",

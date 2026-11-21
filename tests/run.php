@@ -60,11 +60,17 @@ $expected = [
                 'possible-method-access-on-null' => 2,
             ],
         'tests/fixtures/Configuration.php' => [],
-        'tests/fixtures/ConfigurationNegative.php' => [
-            'alfredbez/symfony/invalid-root-node-method' => 2,
-            'method-access-on-null' => 1,
-            'non-existent-method' => 3,
-        ],
+        'tests/fixtures/ConfigurationNegative.php' => $isSymfony7
+            ? [
+                'alfredbez/symfony/invalid-root-node-method' => 2,
+                'method-access-on-null' => 1,
+                'non-existent-method' => 3,
+            ]
+            : [
+                'alfredbez/symfony/invalid-root-node-method' => 2,
+                'non-existent-method' => 7,
+                'possible-method-access-on-null' => 1,
+            ],
         'tests/fixtures/CustomNodeBuilderConfig.php' => [],
         'tests/fixtures/CustomNodeBuilderConfigNegative.php' => $isSymfony7
             ? [
@@ -154,16 +160,18 @@ $expected = [
                 'non-existent-method' => 9,
             ]
             : [
-                'mixed-method-access' => 26,
+                'mixed-method-access' => 22,
                 'mixed-return-statement' => 2,
-                'non-existent-method' => 2,
+                'non-existent-method' => 10,
+                'possible-method-access-on-null' => 2,
             ],
         'tests/fixtures/CustomNodeBuilderConfigNegative.php' => $isSymfony7
             ? [
                 'non-existent-method' => 11,
             ]
             : [
-                'non-existent-method' => 7,
+                'non-existent-method' => 14,
+                'possible-method-access-on-null' => 3,
             ],
         'tests/fixtures/ContainerFlags.php' => [
             'ambiguous-object-method-access' => 8,

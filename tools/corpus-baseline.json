@@ -24,20 +24,17 @@
         },
         "symfony": {
             "ref": "v7.2.9",
-            "eliminated_count": 1121,
+            "eliminated_count": 1116,
             "eliminated_by_code": {
                 "less-specific-argument": 43,
                 "less-specific-return-statement": 17,
                 "mixed-argument": 1,
                 "mixed-assignment": 3,
                 "mixed-method-access": 511,
-                "non-existent-method": 546
+                "non-existent-method": 541
             },
             "added_by_code": {
-                "method-access-on-null": 1,
-                "mixed-assignment": 1,
-                "mixed-method-access": 5,
-                "possible-method-access-on-null": 9,
+                "possible-method-access-on-null": 10,
                 "possibly-invalid-argument": 1
             }
         },
