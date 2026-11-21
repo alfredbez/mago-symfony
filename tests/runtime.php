@@ -57,6 +57,18 @@ check(
     'Uppercase prototype names remain valid at runtime',
 );
 
+require __DIR__ . '/fixtures/CustomNodeBuilderConfig.php';
+$customConfig = new \SymfonyFixture\CustomNodeBuilderConfig();
+check($customConfig->setNodeClassAndNestedInheritance() instanceof \Symfony\Component\Config\Definition\Builder\ArrayNodeDefinition, 'Custom setNodeClass mappings and nested inheritance return root ArrayNodeDefinition');
+check($customConfig->customBuilderSubclassPreserved() === 'ok', 'Custom NodeBuilder subclass survives end() and nested children()');
+check(
+    (new \Symfony\Component\Config\Definition\Builder\NodeBuilder())
+        ->setNodeClass('custom', \SymfonyFixture\CustomNodeDefinition::class)
+        ->node('a', 'custom')
+        ->end() === null,
+    'Unparented NodeBuilder with setNodeClass still produces a child whose end() is null',
+);
+
 require __DIR__ . '/fixtures/TreeBuilderScopes.php';
 require __DIR__ . '/fixtures/TreeBuilderScopesNegative.php';
 $scopes = new \SymfonyFixture\TreeBuilderScopes();

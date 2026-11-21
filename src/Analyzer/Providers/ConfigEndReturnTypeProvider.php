@@ -8,6 +8,10 @@ use Mago\Sdk\Analyzer\MethodReturnTypeProvider;
 use Mago\Sdk\Analyzer\MethodTarget;
 use Mago\Sdk\Analyzer\ReturnTypeProviderContext;
 use Mago\Sdk\Analyzer\Type;
+use Mago\Sdk\Analyzer\Type\ArrayItem;
+use Mago\Sdk\Analyzer\Type\ArrayKey;
+use Mago\Sdk\Analyzer\Type\ArrayKeyKind;
+use Mago\Sdk\Analyzer\Type\KeyedArrayType;
 use Mago\Sdk\Analyzer\Type\NamedObjectType;
 use Mago\Sdk\Analyzer\Type\SimpleAtomicType;
 use Mago\Sdk\Analyzer\Type\SimpleAtomicTypeKind;
@@ -26,6 +30,7 @@ use Mago\Sdk\Analyzer\Type\SimpleAtomicTypeKind;
 final class ConfigEndReturnTypeProvider implements MethodReturnTypeProvider
 {
     private const NS = 'Symfony\\Component\\Config\\Definition\\Builder\\';
+    private const TREE_BUILDER = self::NS . 'TreeBuilder';
     private const NODE_BUILDER = self::NS . 'NodeBuilder';
     private const NODE_DEFINITION = self::NS . 'NodeDefinition';
     private const ARRAY_NODE_DEFINITION = self::NS . 'ArrayNodeDefinition';
@@ -73,25 +78,25 @@ final class ConfigEndReturnTypeProvider implements MethodReturnTypeProvider
     ];
 
     private const BUILDER_NODE_METHODS = [
-        'arraynode' => self::ARRAY_NODE_DEFINITION,
-        'booleannode' => self::NODE_TYPE_MAP['boolean'],
-        'enumnode' => self::NODE_TYPE_MAP['enum'],
-        'floatnode' => self::NODE_TYPE_MAP['float'],
-        'integernode' => self::NODE_TYPE_MAP['integer'],
-        'scalarnode' => self::NODE_TYPE_MAP['scalar'],
-        'stringnode' => self::NODE_TYPE_MAP['string'],
-        'variablenode' => self::NODE_TYPE_MAP['variable'],
+        'arraynode' => 'array',
+        'booleannode' => 'boolean',
+        'enumnode' => 'enum',
+        'floatnode' => 'float',
+        'integernode' => 'integer',
+        'scalarnode' => 'scalar',
+        'stringnode' => 'string',
+        'variablenode' => 'variable',
     ];
 
     private const PROTOTYPE_SHORTCUTS = [
-        'arrayprototype' => self::ARRAY_NODE_DEFINITION,
-        'booleanprototype' => self::NODE_TYPE_MAP['boolean'],
-        'enumprototype' => self::NODE_TYPE_MAP['enum'],
-        'floatprototype' => self::NODE_TYPE_MAP['float'],
-        'integerprototype' => self::NODE_TYPE_MAP['integer'],
-        'scalarprototype' => self::NODE_TYPE_MAP['scalar'],
-        'stringprototype' => self::NODE_TYPE_MAP['string'],
-        'variableprototype' => self::NODE_TYPE_MAP['variable'],
+        'arrayprototype' => 'array',
+        'booleanprototype' => 'boolean',
+        'enumprototype' => 'enum',
+        'floatprototype' => 'float',
+        'integerprototype' => 'integer',
+        'scalarprototype' => 'scalar',
+        'stringprototype' => 'string',
+        'variableprototype' => 'variable',
     ];
 
     private ?Type $nullType = null;
@@ -99,6 +104,9 @@ final class ConfigEndReturnTypeProvider implements MethodReturnTypeProvider
 
     /** @var array<string, Type> */
     private array $plainTypes = [];
+
+    /** @var array<string, bool> */
+    private array $nodeBuilderClassCache = [];
 
     public function getTargets(): array
     {
@@ -110,6 +118,8 @@ final class ConfigEndReturnTypeProvider implements MethodReturnTypeProvider
             MethodTarget::exact(self::ARRAY_NODE_DEFINITION, 'prototype'),
             MethodTarget::exact(self::NODE_BUILDER, 'end'),
             MethodTarget::exact(self::NODE_BUILDER, 'node'),
+            MethodTarget::exact(self::NODE_BUILDER, 'setNodeClass'),
+            MethodTarget::exact(self::NODE_BUILDER, 'setParent'),
             MethodTarget::exact(self::EXPR_BUILDER, 'end'),
             MethodTarget::exact(self::MERGE_BUILDER, 'end'),
         ];
@@ -132,26 +142,28 @@ final class ConfigEndReturnTypeProvider implements MethodReturnTypeProvider
 
         return match ($name) {
             'end' => $this->resolveEnd($context, $receiver),
-            'children' => $this->withParent(self::NODE_BUILDER, $receiver),
+            'children' => $this->resolveChildren($context, $receiver),
             'validate', 'beforeNormalization' => $this->withParent(self::EXPR_BUILDER, $receiver),
             'prototype' => $this->resolvePrototype($context, $receiver),
             'node' => $this->resolveDynamicNode($context, $receiver),
-            'arrayNode' => $this->resolveBuilderNode($context, self::ARRAY_NODE_DEFINITION, $receiver),
-            'booleanNode' => $this->resolveBuilderNode($context, self::NODE_TYPE_MAP['boolean'], $receiver),
-            'enumNode' => $this->resolveBuilderNode($context, self::NODE_TYPE_MAP['enum'], $receiver),
-            'floatNode' => $this->resolveBuilderNode($context, self::NODE_TYPE_MAP['float'], $receiver),
-            'integerNode' => $this->resolveBuilderNode($context, self::NODE_TYPE_MAP['integer'], $receiver),
-            'scalarNode' => $this->resolveBuilderNode($context, self::NODE_TYPE_MAP['scalar'], $receiver),
-            'stringNode' => $this->resolveBuilderNode($context, self::NODE_TYPE_MAP['string'], $receiver),
-            'variableNode' => $this->resolveBuilderNode($context, self::NODE_TYPE_MAP['variable'], $receiver),
-            'arrayPrototype' => $this->resolvePrototypeShortcut($context, self::ARRAY_NODE_DEFINITION, $receiver),
-            'booleanPrototype' => $this->resolvePrototypeShortcut($context, self::NODE_TYPE_MAP['boolean'], $receiver),
-            'enumPrototype' => $this->resolvePrototypeShortcut($context, self::NODE_TYPE_MAP['enum'], $receiver),
-            'floatPrototype' => $this->resolvePrototypeShortcut($context, self::NODE_TYPE_MAP['float'], $receiver),
-            'integerPrototype' => $this->resolvePrototypeShortcut($context, self::NODE_TYPE_MAP['integer'], $receiver),
-            'scalarPrototype' => $this->resolvePrototypeShortcut($context, self::NODE_TYPE_MAP['scalar'], $receiver),
-            'stringPrototype' => $this->resolvePrototypeShortcut($context, self::NODE_TYPE_MAP['string'], $receiver),
-            'variablePrototype' => $this->resolvePrototypeShortcut($context, self::NODE_TYPE_MAP['variable'], $receiver),
+            'setNodeClass' => $this->resolveSetNodeClass($context, $receiver),
+            'setParent' => $this->resolveSetParent($context, $receiver),
+            'arrayNode' => $this->resolveBuilderNode($context, 'array', self::ARRAY_NODE_DEFINITION, $receiver),
+            'booleanNode' => $this->resolveBuilderNode($context, 'boolean', self::NODE_TYPE_MAP['boolean'], $receiver),
+            'enumNode' => $this->resolveBuilderNode($context, 'enum', self::NODE_TYPE_MAP['enum'], $receiver),
+            'floatNode' => $this->resolveBuilderNode($context, 'float', self::NODE_TYPE_MAP['float'], $receiver),
+            'integerNode' => $this->resolveBuilderNode($context, 'integer', self::NODE_TYPE_MAP['integer'], $receiver),
+            'scalarNode' => $this->resolveBuilderNode($context, 'scalar', self::NODE_TYPE_MAP['scalar'], $receiver),
+            'stringNode' => $this->resolveBuilderNode($context, 'string', self::NODE_TYPE_MAP['string'], $receiver),
+            'variableNode' => $this->resolveBuilderNode($context, 'variable', self::NODE_TYPE_MAP['variable'], $receiver),
+            'arrayPrototype' => $this->resolvePrototypeShortcut($context, 'array', self::ARRAY_NODE_DEFINITION, $receiver),
+            'booleanPrototype' => $this->resolvePrototypeShortcut($context, 'boolean', self::NODE_TYPE_MAP['boolean'], $receiver),
+            'enumPrototype' => $this->resolvePrototypeShortcut($context, 'enum', self::NODE_TYPE_MAP['enum'], $receiver),
+            'floatPrototype' => $this->resolvePrototypeShortcut($context, 'float', self::NODE_TYPE_MAP['float'], $receiver),
+            'integerPrototype' => $this->resolvePrototypeShortcut($context, 'integer', self::NODE_TYPE_MAP['integer'], $receiver),
+            'scalarPrototype' => $this->resolvePrototypeShortcut($context, 'scalar', self::NODE_TYPE_MAP['scalar'], $receiver),
+            'stringPrototype' => $this->resolvePrototypeShortcut($context, 'string', self::NODE_TYPE_MAP['string'], $receiver),
+            'variablePrototype' => $this->resolvePrototypeShortcut($context, 'variable', self::NODE_TYPE_MAP['variable'], $receiver),
             default => $this->dispatchNormalizedMethod($context, strtolower($name), $receiver),
         };
     }
@@ -160,16 +172,94 @@ final class ConfigEndReturnTypeProvider implements MethodReturnTypeProvider
     {
         return match ($method) {
             'end' => $this->resolveEnd($context, $receiver),
-            'children' => $this->withParent(self::NODE_BUILDER, $receiver),
+            'children' => $this->resolveChildren($context, $receiver),
             'validate', 'beforenormalization' => $this->withParent(self::EXPR_BUILDER, $receiver),
             'prototype' => $this->resolvePrototype($context, $receiver),
             'node' => $this->resolveDynamicNode($context, $receiver),
+            'setnodeclass' => $this->resolveSetNodeClass($context, $receiver),
+            'setparent' => $this->resolveSetParent($context, $receiver),
             default => match (true) {
-                isset(self::BUILDER_NODE_METHODS[$method]) => $this->resolveBuilderNode($context, self::BUILDER_NODE_METHODS[$method], $receiver),
-                isset(self::PROTOTYPE_SHORTCUTS[$method]) => $this->resolvePrototypeShortcut($context, self::PROTOTYPE_SHORTCUTS[$method], $receiver),
+                isset(self::BUILDER_NODE_METHODS[$method]) => $this->resolveBuilderNode(
+                    $context,
+                    self::BUILDER_NODE_METHODS[$method],
+                    self::NODE_TYPE_MAP[self::BUILDER_NODE_METHODS[$method]],
+                    $receiver,
+                ),
+                isset(self::PROTOTYPE_SHORTCUTS[$method]) => $this->resolvePrototypeShortcut(
+                    $context,
+                    self::PROTOTYPE_SHORTCUTS[$method],
+                    self::NODE_TYPE_MAP[self::PROTOTYPE_SHORTCUTS[$method]],
+                    $receiver,
+                ),
                 default => null,
             },
         };
+    }
+
+    private function resolveChildren(ReturnTypeProviderContext $context, ?Type $receiver): Type
+    {
+        $parent = $this->extractParent($receiver);
+        if ($parent !== null) {
+            $parentObject = $this->firstNamedObject($parent);
+            if ($parentObject !== null && $this->isNodeBuilderClass($context, $parentObject->name)) {
+                $mappings = $parentObject->parameters[1] ?? null;
+                if ($mappings !== null && $receiver !== null) {
+                    return Type::namedObject($parentObject->name, $receiver, $mappings);
+                }
+
+                return $this->withParent($parentObject->name, $receiver);
+            }
+        }
+
+        return $this->withParent(self::NODE_BUILDER, $receiver);
+    }
+
+    private function resolveSetNodeClass(ReturnTypeProviderContext $context, ?Type $receiver): ?Type
+    {
+        $builderObject = $this->firstNamedObject($receiver);
+        if ($builderObject === null) {
+            return null;
+        }
+
+        $typeArg = $context->invocation->getArgument(0, 'type')?->type?->getLiteralString();
+        $classType = $context->invocation->getArgument(1, 'class')?->type;
+        $classArg = $classType?->getLiteralClassString() ?? $classType?->getLiteralString();
+
+        if ($typeArg === null || $classArg === null) {
+            return $receiver;
+        }
+
+        $nodeClass = ltrim($classArg, '\\');
+        if ($nodeClass === '' || !$context->codebase->classExists($nodeClass)) {
+            return $receiver;
+        }
+
+        $mappings = $this->extractNodeMappings($receiver);
+        $mappings[strtolower($typeArg)] = $nodeClass;
+
+        $parentParam = $builderObject->parameters[0] ?? $this->nullableArrayNodeType();
+
+        return Type::namedObject($builderObject->name, $parentParam, self::encodeNodeMappings($mappings));
+    }
+
+    private function resolveSetParent(ReturnTypeProviderContext $context, ?Type $receiver): ?Type
+    {
+        $builderObject = $this->firstNamedObject($receiver);
+        if ($builderObject === null) {
+            return null;
+        }
+
+        $parentArg = $context->invocation->getArgument(0, 'parent')?->type;
+        if ($parentArg === null) {
+            return $receiver;
+        }
+
+        $mappings = $builderObject->parameters[1] ?? null;
+        if ($mappings !== null) {
+            return Type::namedObject($builderObject->name, $parentArg, $mappings);
+        }
+
+        return Type::namedObject($builderObject->name, $parentArg);
     }
 
     private function resolvePrototype(ReturnTypeProviderContext $context, ?Type $receiver): ?Type
@@ -179,7 +269,11 @@ final class ConfigEndReturnTypeProvider implements MethodReturnTypeProvider
             return null;
         }
 
-        $nodeClass = self::NODE_TYPE_MAP[$typeArg] ?? self::NODE_TYPE_MAP[strtolower($typeArg)] ?? null;
+        $lowerType = strtolower($typeArg);
+        $nodeClass = $this->extractNodeMapping($this->extractParent($receiver), $lowerType)
+            ?? self::NODE_TYPE_MAP[$typeArg]
+            ?? self::NODE_TYPE_MAP[$lowerType]
+            ?? null;
         if ($nodeClass === null || !$context->codebase->classExists($nodeClass)) {
             return null;
         }
@@ -187,8 +281,13 @@ final class ConfigEndReturnTypeProvider implements MethodReturnTypeProvider
         return $this->withParent($nodeClass, $receiver);
     }
 
-    private function resolvePrototypeShortcut(ReturnTypeProviderContext $context, string $nodeClass, ?Type $receiver): ?Type
-    {
+    private function resolvePrototypeShortcut(
+        ReturnTypeProviderContext $context,
+        string $nodeType,
+        string $defaultNodeClass,
+        ?Type $receiver,
+    ): ?Type {
+        $nodeClass = $this->extractNodeMapping($this->extractParent($receiver), $nodeType) ?? $defaultNodeClass;
         if (!$context->codebase->classExists($nodeClass)) {
             return null;
         }
@@ -203,7 +302,11 @@ final class ConfigEndReturnTypeProvider implements MethodReturnTypeProvider
             return null;
         }
 
-        $nodeClass = self::NODE_TYPE_MAP[$typeArg] ?? self::NODE_TYPE_MAP[strtolower($typeArg)] ?? null;
+        $lowerType = strtolower($typeArg);
+        $nodeClass = $this->extractNodeMapping($receiver, $lowerType)
+            ?? self::NODE_TYPE_MAP[$typeArg]
+            ?? self::NODE_TYPE_MAP[$lowerType]
+            ?? null;
         if ($nodeClass === null || !$context->codebase->classExists($nodeClass)) {
             return null;
         }
@@ -211,8 +314,13 @@ final class ConfigEndReturnTypeProvider implements MethodReturnTypeProvider
         return $this->withParent($nodeClass, $this->nodeParent($receiver));
     }
 
-    private function resolveBuilderNode(ReturnTypeProviderContext $context, string $nodeClass, ?Type $receiver): ?Type
-    {
+    private function resolveBuilderNode(
+        ReturnTypeProviderContext $context,
+        string $nodeType,
+        string $defaultNodeClass,
+        ?Type $receiver,
+    ): ?Type {
+        $nodeClass = $this->extractNodeMapping($receiver, $nodeType) ?? $defaultNodeClass;
         if (!$context->codebase->classExists($nodeClass)) {
             return null;
         }
@@ -346,5 +454,121 @@ final class ConfigEndReturnTypeProvider implements MethodReturnTypeProvider
         }
 
         return null;
+    }
+
+    private function firstNamedObject(?Type $type): ?NamedObjectType
+    {
+        if ($type === null) {
+            return null;
+        }
+
+        foreach ($type->atomicTypes as $atomic) {
+            if ($atomic instanceof NamedObjectType) {
+                return $atomic;
+            }
+        }
+
+        return null;
+    }
+
+    private function isNodeBuilderClass(ReturnTypeProviderContext $context, string $className): bool
+    {
+        if ($className === self::NODE_BUILDER) {
+            return true;
+        }
+
+        if ($className === self::TREE_BUILDER || isset(self::BUILTIN_NODE_DEFINITIONS[$className])) {
+            return false;
+        }
+
+        $lower = strtolower($className);
+        if (isset($this->nodeBuilderClassCache[$lower])) {
+            return $this->nodeBuilderClassCache[$lower];
+        }
+
+        if ($lower === self::LOWER_NODE_BUILDER) {
+            return $this->nodeBuilderClassCache[$lower] = true;
+        }
+
+        foreach ($context->codebase->getClassAncestors($className) as $ancestor) {
+            if (strtolower($ancestor) === self::LOWER_NODE_BUILDER) {
+                return $this->nodeBuilderClassCache[$lower] = true;
+            }
+        }
+
+        return $this->nodeBuilderClassCache[$lower] = false;
+    }
+
+    private function extractNodeMapping(?Type $type, string $nodeType): ?string
+    {
+        if ($type === null) {
+            return null;
+        }
+
+        foreach ($type->atomicTypes as $atomic) {
+            if (!$atomic instanceof NamedObjectType || $atomic->parameters === null || !isset($atomic->parameters[1])) {
+                continue;
+            }
+
+            foreach ($atomic->parameters[1]->atomicTypes as $mapAtomic) {
+                if (!$mapAtomic instanceof KeyedArrayType || $mapAtomic->knownItems === null) {
+                    continue;
+                }
+
+                foreach ($mapAtomic->knownItems as $item) {
+                    if ($item->key->kind === ArrayKeyKind::String && $item->key->value === $nodeType) {
+                        $className = $item->type->getLiteralString();
+                        if ($className !== null) {
+                            return $className;
+                        }
+                    }
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /** @return array<string, string> */
+    private function extractNodeMappings(?Type $type): array
+    {
+        if ($type === null) {
+            return [];
+        }
+
+        $mappings = [];
+        foreach ($type->atomicTypes as $atomic) {
+            if (!$atomic instanceof NamedObjectType || $atomic->parameters === null || !isset($atomic->parameters[1])) {
+                continue;
+            }
+
+            foreach ($atomic->parameters[1]->atomicTypes as $mapAtomic) {
+                if (!$mapAtomic instanceof KeyedArrayType || $mapAtomic->knownItems === null) {
+                    continue;
+                }
+
+                foreach ($mapAtomic->knownItems as $item) {
+                    if ($item->key->kind === ArrayKeyKind::String && is_string($item->key->value)) {
+                        $className = $item->type->getLiteralString();
+                        if ($className !== null) {
+                            $mappings[$item->key->value] = $className;
+                        }
+                    }
+                }
+            }
+        }
+
+        return $mappings;
+    }
+
+    /** @param array<string, string> $mappings */
+    private static function encodeNodeMappings(array $mappings): Type
+    {
+        $items = [];
+        foreach ($mappings as $key => $className) {
+            $items[] = new ArrayItem(new ArrayKey(ArrayKeyKind::String, $key), false, Type::literalString($className));
+        }
+
+        return Type::fromAtomic(new KeyedArrayType($items, null, null, true));
     }
 }

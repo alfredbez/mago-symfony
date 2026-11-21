@@ -229,6 +229,28 @@
       "derivation": "Local hook audit regression extending PHPStan non-array-root cases. This does not claim control-flow or by-reference capture analysis."
     },
     {
+      "id": "SYMFONY-T005",
+      "title": "Custom NodeBuilder subclasses and setNodeClass() mappings survive fluent chains",
+      "sources": [
+        "phpstan-tree-builder",
+        "symfony-node-builder"
+      ],
+      "fixture": "<?php function custom(): void { (new \\Symfony\\Component\\Config\\Definition\\Builder\\ArrayNodeDefinition('root'))->children()->setNodeClass('custom', \\SymfonyFixture\\CustomNodeDefinition::class)->node('a', 'custom')->customSetting()->end()->end(); }",
+      "semantics": "NodeBuilder::setNodeClass() registers or overrides node classes for node() and shortcut methods, and NodeBuilder::append() clones the builder (class and node mappings) into nested BuilderAwareInterface array nodes.",
+      "analyzer_expectation": "Track custom setNodeClass() mappings across node(), built-in shortcuts, nested arrayNode()->children(), and prototypes; preserve custom NodeBuilder subclasses across setParent(), end(), and nested children(); keep unparented NodeBuilder chains nullable per SYMFONY-T002.",
+      "negative_control": "Unknown methods on custom node definitions, unmapped customSetting() on standard scalarNode(), invalid children() on overridden CustomScalarNodeDefinition, unknown methods after end(), and unparented setNodeClass() dereferences all report.",
+      "priority": "P1",
+      "versions": "Verified on Mago 1.60.2 / PHP 8.3 against Symfony Config 6.4 and 7.x.",
+      "coverage": [
+        "tests/fixtures/CustomNodeBuilderConfig.php",
+        "tests/fixtures/CustomNodeBuilderConfigNegative.php",
+        "tests/run.php",
+        "tests/runtime.php"
+      ],
+      "status": "covered",
+      "derivation": "Wave 3 extension of TreeBuilder fluent tracking for custom NodeBuilder subclasses and setNodeClass() registrations."
+    },
+    {
       "id": "SYMFONY-C005",
       "title": "Compiled container XML resolves public, private, aliased, and factory services",
       "sources": [

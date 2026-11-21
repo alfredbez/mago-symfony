@@ -65,6 +65,16 @@ $expected = [
             'method-access-on-null' => 1,
             'non-existent-method' => 3,
         ],
+        'tests/fixtures/CustomNodeBuilderConfig.php' => [],
+        'tests/fixtures/CustomNodeBuilderConfigNegative.php' => $isSymfony7
+            ? [
+                'method-access-on-null' => 1,
+                'non-existent-method' => 4,
+            ]
+            : [
+                'non-existent-method' => 4,
+                'possible-method-access-on-null' => 1,
+            ],
         'tests/fixtures/ContainerUsage.php' => [],
         'tests/fixtures/ContainerFlags.php' => [],
         'tests/fixtures/ContainerFlagsNegative.php' => [
@@ -136,6 +146,24 @@ $expected = [
             : [
                 'non-existent-method' => 21,
                 'possible-method-access-on-null' => 6,
+            ],
+        'tests/fixtures/CustomNodeBuilderConfig.php' => $isSymfony7
+            ? [
+                'mixed-method-access' => 22,
+                'mixed-return-statement' => 2,
+                'non-existent-method' => 9,
+            ]
+            : [
+                'mixed-method-access' => 26,
+                'mixed-return-statement' => 2,
+                'non-existent-method' => 2,
+            ],
+        'tests/fixtures/CustomNodeBuilderConfigNegative.php' => $isSymfony7
+            ? [
+                'non-existent-method' => 11,
+            ]
+            : [
+                'non-existent-method' => 7,
             ],
         'tests/fixtures/ContainerFlags.php' => [
             'ambiguous-object-method-access' => 8,
@@ -219,6 +247,22 @@ $failures += assertMessageCount(
     'tests/fixtures/ConfigurationNegative.php',
     'non-existent-method',
     'missingOnArrayNode',
+    1,
+);
+$failures += assertMessageCount(
+    'with extension',
+    $with,
+    'tests/fixtures/CustomNodeBuilderConfigNegative.php',
+    'non-existent-method',
+    'CustomNodeDefinition',
+    1,
+);
+$failures += assertMessageCount(
+    'with extension',
+    $with,
+    'tests/fixtures/CustomNodeBuilderConfigNegative.php',
+    'non-existent-method',
+    'CustomScalarNodeDefinition',
     1,
 );
 
