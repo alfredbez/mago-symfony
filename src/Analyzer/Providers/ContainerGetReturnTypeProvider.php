@@ -51,16 +51,22 @@ final class ContainerGetReturnTypeProvider implements MethodReturnTypeProvider
             return $serviceType;
         }
 
-        $literalBehavior = $invalidBehavior->type?->getLiteralInt();
+        $throwing = Type::literalInt(self::EXCEPTION_ON_INVALID_REFERENCE);
         if (
-            $literalBehavior === self::RUNTIME_EXCEPTION_ON_INVALID_REFERENCE
-            || $literalBehavior === self::EXCEPTION_ON_INVALID_REFERENCE
+            $context->invocation->receiverType !== null
+            && $context->types->isContainedBy(
+                $context->invocation->receiverType,
+                Type::namedObject('Symfony\\Component\\DependencyInjection\\ContainerBuilder'),
+            )
         ) {
+            $throwing = Type::union($throwing, Type::literalInt(self::RUNTIME_EXCEPTION_ON_INVALID_REFERENCE));
+        }
+
+        if ($invalidBehavior->type !== null && $context->types->isContainedBy($invalidBehavior->type, $throwing)) {
             return $serviceType;
         }
 
-        // NULL_ON_INVALID_REFERENCE, IGNORE_ON_INVALID_REFERENCE, IGNORE_ON_UNINITIALIZED_REFERENCE,
-        // or a non-literal int can return null at runtime.
+        // Container returns null for flag 0, despite ContainerInterface's conditional PHPDoc.
         return Type::union($serviceType, Type::null());
     }
 

@@ -45,6 +45,11 @@ $expected = [
             'non-existent-method' => 3,
         ],
         'tests/fixtures/ContainerUsage.php' => [],
+        'tests/fixtures/ContainerFlags.php' => [],
+        'tests/fixtures/ContainerFlagsNegative.php' => [
+            'non-existent-method' => 1,
+            'possible-method-access-on-null' => 8,
+        ],
         'tests/fixtures/ContainerMap.php' => [],
         'tests/fixtures/ContainerMapNegative.php' => [
             'mixed-method-access' => 2,
@@ -72,6 +77,14 @@ $expected = [
             'non-existent-method' => 21,
             'possible-method-access-on-null' => 6,
         ],
+        'tests/fixtures/ContainerFlags.php' => [
+            'ambiguous-object-method-access' => 8,
+            'possible-method-access-on-null' => 3,
+        ],
+        'tests/fixtures/ContainerFlagsNegative.php' => [
+            'ambiguous-object-method-access' => 9,
+            'possible-method-access-on-null' => 8,
+        ],
         'tests/fixtures/ContainerMap.php' => [
             'mixed-method-access' => 4,
             'mixed-return-statement' => 1,
@@ -86,6 +99,7 @@ $expected = [
             'mixed-method-access' => 5,
             'mixed-return-statement' => 1,
             'possible-method-access-on-null' => 2,
+            'redundant-nullsafe-operator' => 1,
         ],
         'tests/fixtures/ContainerNegative.php' => [
             'ambiguous-object-method-access' => 4,
@@ -150,6 +164,8 @@ $failures += assertMessageCount(
 
 $sites = [
     false => [
+        'tests/fixtures/ContainerFlags.php' => [],
+        'tests/fixtures/ContainerFlagsNegative.php' => ['14:possible-method-access-on-null', '15:possible-method-access-on-null', '16:possible-method-access-on-null', '21:possible-method-access-on-null', '22:possible-method-access-on-null', '23:possible-method-access-on-null', '24:possible-method-access-on-null', '25:possible-method-access-on-null', '30:non-existent-method'],
         'tests/fixtures/ContainerMap.php' => [],
         'tests/fixtures/ContainerMapNegative.php' => [
             '14:non-existent-method', '15:non-existent-method', '20:mixed-method-access',
@@ -157,6 +173,8 @@ $sites = [
         ],
     ],
     true => [
+        'tests/fixtures/ContainerFlags.php' => ['14:ambiguous-object-method-access', '14:possible-method-access-on-null', '15:ambiguous-object-method-access', '21:ambiguous-object-method-access', '21:possible-method-access-on-null', '22:ambiguous-object-method-access', '22:possible-method-access-on-null', '27:ambiguous-object-method-access', '28:ambiguous-object-method-access', '29:ambiguous-object-method-access', '30:ambiguous-object-method-access'],
+        'tests/fixtures/ContainerFlagsNegative.php' => ['14:ambiguous-object-method-access', '14:possible-method-access-on-null', '15:ambiguous-object-method-access', '16:ambiguous-object-method-access', '16:possible-method-access-on-null', '21:ambiguous-object-method-access', '21:possible-method-access-on-null', '22:ambiguous-object-method-access', '22:possible-method-access-on-null', '23:ambiguous-object-method-access', '23:possible-method-access-on-null', '24:ambiguous-object-method-access', '24:possible-method-access-on-null', '25:ambiguous-object-method-access', '25:possible-method-access-on-null', '30:ambiguous-object-method-access', '30:possible-method-access-on-null'],
         'tests/fixtures/ContainerMap.php' => [
             '14:mixed-method-access', '14:mixed-return-statement', '19:mixed-method-access',
             '24:mixed-method-access', '25:mixed-method-access',

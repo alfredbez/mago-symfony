@@ -43,7 +43,7 @@ final class ContainerUsage
     {
         $sfContainer->get(Greeter::class)->greet('world');
         $sfContainer->get(Greeter::class, SfContainerInterface::EXCEPTION_ON_INVALID_REFERENCE)->greet('world');
-        $sfContainer->get(Greeter::class, SfContainerInterface::RUNTIME_EXCEPTION_ON_INVALID_REFERENCE)->greet('world');
+        $sfContainer->get(Greeter::class, SfContainerInterface::RUNTIME_EXCEPTION_ON_INVALID_REFERENCE)?->greet('world');
         $sfContainer->get('shop.greeter')->greet('world');
 
         $concreteContainer->get(Greeter::class)->greet('world');
