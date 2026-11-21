@@ -191,4 +191,40 @@ check($securityHelper->getUser() === $appUser, 'SecurityBundle Security::getUser
 $tokenStorage->setToken(null);
 check($securityHelper->getUser() === null, 'SecurityBundle Security::getUser returns null when unauthenticated');
 
+$req = new \Symfony\Component\HttpFoundation\Request();
+check($req->getRequestFormat() === 'html', 'Request::getRequestFormat default returns string html');
+check($req->getRequestFormat('json') === 'json', 'Request::getRequestFormat returns non-null string default');
+check($req->getRequestFormat(null) === null, 'Request::getRequestFormat(null) returns null when unset');
+check($req->getPreferredFormat() === 'html', 'Request::getPreferredFormat default returns string html');
+check($req->getPreferredFormat(null) === null, 'Request::getPreferredFormat(null) returns null when unset');
+
+$respHeaders = new \Symfony\Component\HttpFoundation\ResponseHeaderBag();
+$respHeaders->setCookie(\Symfony\Component\HttpFoundation\Cookie::create('sid', 'abc'));
+$flatCookies = $respHeaders->getCookies(\Symfony\Component\HttpFoundation\ResponseHeaderBag::COOKIES_FLAT);
+check(array_is_list($flatCookies) && count($flatCookies) === 1 && $flatCookies[0] instanceof \Symfony\Component\HttpFoundation\Cookie, 'ResponseHeaderBag::getCookies(COOKIES_FLAT) returns list<Cookie>');
+$nestedCookies = $respHeaders->getCookies(\Symfony\Component\HttpFoundation\ResponseHeaderBag::COOKIES_ARRAY);
+check(isset($nestedCookies['']['/']['sid']) && $nestedCookies['']['/']['sid'] instanceof \Symfony\Component\HttpFoundation\Cookie, 'ResponseHeaderBag::getCookies(COOKIES_ARRAY) returns domain/path/name nested Cookie map');
+
+$consoleApp = new \Symfony\Component\Console\Application();
+$defaultHelpers = $consoleApp->getHelperSet();
+check($defaultHelpers->get('question') instanceof \Symfony\Component\Console\Helper\QuestionHelper, 'HelperSet::get(question) returns QuestionHelper');
+check($defaultHelpers->get('formatter') instanceof \Symfony\Component\Console\Helper\FormatterHelper, 'HelperSet::get(formatter) returns FormatterHelper');
+check($defaultHelpers->get('debug_formatter') instanceof \Symfony\Component\Console\Helper\DebugFormatterHelper, 'HelperSet::get(debug_formatter) returns DebugFormatterHelper');
+check($defaultHelpers->get('process') instanceof \Symfony\Component\Console\Helper\ProcessHelper, 'HelperSet::get(process) returns ProcessHelper');
+
+foreach ([
+    static fn () => new \Symfony\Component\Console\Input\InputArgument('a', \Symfony\Component\Console\Input\InputArgument::REQUIRED, '', 'oops'),
+    static fn () => new \Symfony\Component\Console\Input\InputArgument('a', \Symfony\Component\Console\Input\InputArgument::OPTIONAL | \Symfony\Component\Console\Input\InputArgument::IS_ARRAY, '', 'bad'),
+    static fn () => new \Symfony\Component\Console\Input\InputOption('o', null, \Symfony\Component\Console\Input\InputOption::VALUE_NONE, '', false),
+    static fn () => new \Symfony\Component\Console\Input\InputOption('o', null, \Symfony\Component\Console\Input\InputOption::VALUE_NONE | \Symfony\Component\Console\Input\InputOption::VALUE_IS_ARRAY),
+    static fn () => new \Symfony\Component\Console\Input\InputOption('o', null, \Symfony\Component\Console\Input\InputOption::VALUE_NEGATABLE | \Symfony\Component\Console\Input\InputOption::VALUE_REQUIRED),
+    static fn () => new \Symfony\Component\Console\Input\InputOption('o', null, \Symfony\Component\Console\Input\InputOption::VALUE_REQUIRED | \Symfony\Component\Console\Input\InputOption::VALUE_IS_ARRAY, '', 'bad'),
+] as $idx => $invalidDefFactory) {
+    try {
+        $invalidDefFactory();
+        throw new RuntimeException("Invalid console definition #{$idx} must throw at runtime");
+    } catch (\Symfony\Component\Console\Exception\ExceptionInterface) {
+    }
+}
+
 fwrite(STDOUT, "Symfony runtime contracts PASS\n\n");

@@ -513,6 +513,13 @@ $xmlExpected = [
             'non-existent-method' => 3,
             'nullable-return-statement' => 1,
         ],
+        'tests/fixtures-xml/Wave5Contracts.php' => [],
+        'tests/fixtures-xml/Wave5ContractsNegative.php' => [
+            'alfredbez/symfony/invalid-console-input-definition' => 6,
+            'invalid-return-statement' => 2,
+            'non-existent-method' => 3,
+            'nullable-return-statement' => 2,
+        ],
     ],
     true => [
         'tests/fixtures-xml/ContainerXmlUsage.php' => [
@@ -561,6 +568,25 @@ $xmlExpected = [
             'mixed-method-access' => 2 - ($serializerHasTemplates ? 1 : 0),
             'non-existent-method' => 1 + ($serializerHasTemplates ? 1 : 0),
             'nullable-return-statement' => 1,
+        ],
+        'tests/fixtures-xml/Wave5Contracts.php' => [
+            'invalid-iterator' => 1,
+            'less-specific-argument' => 4,
+            'less-specific-return-statement' => 1,
+            'mixed-argument' => 1,
+            'mixed-assignment' => 3,
+            'mixed-operand' => 1,
+            'non-iterable-object-iteration' => 1,
+            'possibly-null-operand' => 4,
+        ],
+        'tests/fixtures-xml/Wave5ContractsNegative.php' => [
+            'invalid-iterator' => 1,
+            'invalid-return-statement' => 2,
+            'mixed-assignment' => 2,
+            'mixed-method-access' => 1,
+            'non-existent-method' => 2,
+            'non-iterable-object-iteration' => 1,
+            'nullable-return-statement' => 2,
         ],
     ],
 ];

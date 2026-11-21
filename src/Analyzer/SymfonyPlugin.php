@@ -6,12 +6,15 @@ namespace AlfredBez\MagoSymfony\Analyzer;
 
 use AlfredBez\MagoSymfony\Analyzer\Providers\ConfigEndReturnTypeProvider;
 use AlfredBez\MagoSymfony\Analyzer\Providers\ConsoleCommandArgumentsHook;
+use AlfredBez\MagoSymfony\Analyzer\Providers\ConsoleHelperReturnTypeProvider;
 use AlfredBez\MagoSymfony\Analyzer\Providers\ContainerGetAccessHook;
 use AlfredBez\MagoSymfony\Analyzer\Providers\ContainerGetReturnTypeProvider;
 use AlfredBez\MagoSymfony\Analyzer\Providers\FormGetErrorsReturnTypeProvider;
 use AlfredBez\MagoSymfony\Analyzer\Providers\HeaderBagGetReturnTypeProvider;
 use AlfredBez\MagoSymfony\Analyzer\Providers\ParameterReturnTypeProvider;
+use AlfredBez\MagoSymfony\Analyzer\Providers\RequestFormatReturnTypeProvider;
 use AlfredBez\MagoSymfony\Analyzer\Providers\RequiredInitializerProvider;
+use AlfredBez\MagoSymfony\Analyzer\Providers\ResponseHeaderBagCookiesReturnTypeProvider;
 use AlfredBez\MagoSymfony\Analyzer\Providers\RootNodeReturnTypeProvider;
 use AlfredBez\MagoSymfony\Analyzer\Providers\SecurityUserReturnTypeProvider;
 use AlfredBez\MagoSymfony\Analyzer\Providers\SerializerReturnTypeProvider;
@@ -45,6 +48,9 @@ final class SymfonyPlugin implements Plugin
         $registry->registerMethodReturnTypeProvider(new RootNodeReturnTypeProvider());
         $registry->registerMethodReturnTypeProvider(new ConfigEndReturnTypeProvider());
         $registry->registerMethodReturnTypeProvider(new HeaderBagGetReturnTypeProvider());
+        $registry->registerMethodReturnTypeProvider(new RequestFormatReturnTypeProvider());
+        $registry->registerMethodReturnTypeProvider(new ResponseHeaderBagCookiesReturnTypeProvider());
+        $registry->registerMethodReturnTypeProvider(new ConsoleHelperReturnTypeProvider());
         $registry->registerMethodReturnTypeProvider(new FormGetErrorsReturnTypeProvider());
         $registry->registerMethodReturnTypeProvider(new SerializerReturnTypeProvider());
         $userClass = SecurityUserReturnTypeProvider::configuredUserClass();
