@@ -3,3 +3,5 @@
 .mago/
 __pycache__/
 *.pyc
+.corpus-cache/
+corpus-report.json
