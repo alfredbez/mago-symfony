@@ -96,8 +96,8 @@ final class Configuration implements ConfigurationInterface
         return $treeBuilder;
     }
 
-    public function customNodeBuilder(CustomNodeBuilder $builder): ArrayNodeDefinition
+    public function customNodeBuilder(CustomNodeBuilder $builder): ?ArrayNodeDefinition
     {
-        return $builder->scalarNode('custom')->end()->end();
+        return $builder->end();
     }
 }

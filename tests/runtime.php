@@ -44,4 +44,12 @@ try {
 } catch (ServiceNotFoundException) {
 }
 
+$builder = new \Symfony\Component\Config\Definition\Builder\NodeBuilder();
+check($builder->end() === null, 'An unparented NodeBuilder ends at null');
+check($builder->scalarNode('s')->end() === null, 'A child of an unparented builder has no parent');
+require __DIR__ . '/fixtures/ConfigNodes.php';
+$nodes = new \SymfonyFixture\ConfigNodes();
+check($nodes->nodes() instanceof \Symfony\Component\Config\Definition\Builder\ArrayNodeDefinition, 'Every node end returns to its actual parent');
+check($nodes->prototypes() instanceof \Symfony\Component\Config\Definition\Builder\ArrayNodeDefinition, 'Every prototype end returns to its array');
+
 fwrite(STDOUT, "Symfony runtime contracts PASS\n\n");

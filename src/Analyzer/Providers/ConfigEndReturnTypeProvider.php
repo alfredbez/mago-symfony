@@ -137,7 +137,7 @@ final class ConfigEndReturnTypeProvider implements MethodReturnTypeProvider
                 return null;
             }
 
-            return $this->withParent($nodeClass, $receiver);
+            return $this->withParent($nodeClass, $this->nodeParent($receiver));
         }
 
         if (isset(self::BUILDER_NODE_METHODS[$method])) {
@@ -146,10 +146,20 @@ final class ConfigEndReturnTypeProvider implements MethodReturnTypeProvider
                 return null;
             }
 
-            return $this->withParent($nodeClass, $receiver);
+            return $this->withParent($nodeClass, $this->nodeParent($receiver));
         }
 
         return null;
+    }
+
+    private function nodeParent(?Type $builder): ?Type
+    {
+        if ($builder === null || $this->extractParent($builder) !== null) {
+            return $builder;
+        }
+
+        // NodeBuilder::append() sets the child's parent only when the builder has a parent.
+        return Type::union($builder, Type::null());
     }
 
     private function resolveEnd(ReturnTypeProviderContext $context, ?Type $receiver): ?Type
@@ -161,7 +171,7 @@ final class ConfigEndReturnTypeProvider implements MethodReturnTypeProvider
 
         $declaring = $context->invocation->declaringClass;
         if ($declaring !== null && $this->isOrExtends($context->codebase, $declaring, self::NODE_BUILDER)) {
-            return Type::namedObject(self::ARRAY_NODE_DEFINITION);
+            return Type::union(Type::namedObject(self::ARRAY_NODE_DEFINITION), Type::null());
         }
 
         // Calling end() directly on an unparented NodeDefinition (e.g. past the root node
