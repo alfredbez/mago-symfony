@@ -1,0 +1,232 @@
+{
+  "schema_version": 1,
+  "sources": {
+    "phpstan-tree-builder": {
+      "url": "https://github.com/phpstan/phpstan-symfony/blob/92f34b806e90a5b7bc2baf04a680b71c72b9a62b/tests/Type/Symfony/data/tree_builder.php",
+      "kind": "analyzer-test",
+      "scope": "Concrete roots, seven node types, prototypes and repeated end() calls. No analyzer implementation copied.",
+      "sha256": "8199cff5f9ba77ae8d33e679e4e3a0df754d17d0258f09ef58020ac1a8726224"
+    },
+    "psalm-configuration": {
+      "url": "https://github.com/psalm/psalm-plugin-symfony/blob/54cdc276ad62386bb31a97bdfbfa22c04169fd45/tests/acceptance/acceptance/Configuration.feature",
+      "kind": "analyzer-test",
+      "scope": "Array and enum prototypes. No analyzer implementation copied.",
+      "sha256": "2dacf836454850f849f5a996c386a007db67bac063d12d60c7289867fa9df549"
+    },
+    "psalm-container-service": {
+      "url": "https://github.com/psalm/psalm-plugin-symfony/blob/54cdc276ad62386bb31a97bdfbfa22c04169fd45/tests/acceptance/acceptance/ContainerService.feature",
+      "kind": "analyzer-test",
+      "scope": "Class-string service lookup and preservation of undefined-method diagnostics.",
+      "sha256": "16ca665224372937f76282893e1781566d62a3bdc48244e76524b94b6e947f8b"
+    },
+    "psalm-container-xml": {
+      "url": "https://github.com/psalm/psalm-plugin-symfony/blob/54cdc276ad62386bb31a97bdfbfa22c04169fd45/tests/acceptance/acceptance/ContainerXml.feature",
+      "kind": "analyzer-test",
+      "scope": "Service ids and aliases. The local JSON map replaces the XML input; XML parsing is outside this extension.",
+      "sha256": "cb761c0c27421dbad674d261fa2cda8bf93f5b2a516e04377981efb25fb0178b"
+    },
+    "symfony-node-builder": {
+      "url": "https://github.com/symfony/config/blob/d1923e260b33263f3de01921d6009a598544a43a/Definition/Builder/NodeBuilder.php",
+      "kind": "runtime-contract",
+      "scope": "Symfony 6.4.50. append() sets a child parent only when the builder itself is parented.",
+      "sha256": "36214f947ee4f251b162ec0c9da6e2408bd8438f661a5aa06250ae69eea31654"
+    },
+    "symfony-container": {
+      "url": "https://github.com/symfony/dependency-injection/blob/307c93414e84f4da03b25c5ecaa77fff2f824811/Container.php",
+      "kind": "runtime-contract",
+      "scope": "Symfony 6.4.49. Registered service ids are arbitrary strings; only flag 1 throws for an unknown id.",
+      "sha256": "3e5b09c140f17e3d16ff09145c7d2a5d94d8462c79749aa0f984ec8ea08f7f99"
+    },
+    "symfony-container-builder": {
+      "url": "https://github.com/symfony/dependency-injection/blob/307c93414e84f4da03b25c5ecaa77fff2f824811/ContainerBuilder.php",
+      "kind": "runtime-contract",
+      "scope": "Symfony 6.4.49. get()/doGet() throw for missing definitions with flags 0 and 1.",
+      "sha256": "26476254310a7928ae47e677291c4c4b03207c921505d251a926216b62c4c181"
+    },
+    "symfony-service-locator": {
+      "url": "https://github.com/symfony/dependency-injection/blob/307c93414e84f4da03b25c5ecaa77fff2f824811/ServiceLocator.php",
+      "kind": "runtime-contract",
+      "scope": "Symfony 6.4.49. ServiceLocator implements ServiceProviderInterface and overrides get().",
+      "sha256": "fdcfe194779abdf7e2ea3b3dc21ec6d1ea738579d3c2fe5cf53712c4bd3deafa"
+    }
+  },
+  "cases": [
+    {
+      "id": "SYMFONY-C001",
+      "title": "Explicit service maps override class-name inference",
+      "sources": [
+        "psalm-container-service",
+        "psalm-container-xml",
+        "symfony-container"
+      ],
+      "fixture": "<?php function mapped(\\Psr\\Container\\ContainerInterface $c): void { $c->get(\\SymfonyFixture\\Greeter::class)->implementationOnly(); }",
+      "semantics": "An interface-shaped service id may map to a concrete implementation. A configured target absent from the codebase must not fall back to the id class.",
+      "analyzer_expectation": "Resolve the mapped implementation; retain mixed for a missing mapped class and unknown ids.",
+      "negative_control": "Call a method absent from the concrete service; use a map target missing from the codebase.",
+      "priority": "P0",
+      "versions": "Mago 1.60.2; Symfony Config 6.4.50, DependencyInjection 6.4.49, service-contracts 3.8.1, psr/container 2.0.2. Runtime and analyzer checks passed on PHP 8.3 and 8.4; matching CI configured. PHPStan and Psalm themselves were not executed.",
+      "coverage": [
+        "tests/fixtures/ContainerMap.php",
+        "tests/fixtures/ContainerMapNegative.php",
+        "tests/run.php",
+        "tests/runtime.php"
+      ],
+      "status": "covered",
+      "derivation": "Adapted class-string and alias cases, with local audit regressions for precedence and invalid targets."
+    },
+    {
+      "id": "SYMFONY-C002",
+      "title": "Numeric string service ids survive JSON loading",
+      "sources": [
+        "psalm-container-xml",
+        "symfony-container"
+      ],
+      "fixture": "<?php function numeric(\\Psr\\Container\\ContainerInterface $c): void { $c->get('42')->send('dev@example.com'); }",
+      "semantics": "PHP converts numeric JSON object keys to integer array keys when decoding associatively. Symfony accepts the original string id.",
+      "analyzer_expectation": "Resolve id 42 to Mailer from the committed map.",
+      "negative_control": "Call greet() on the Mailer returned for id 42.",
+      "priority": "P0",
+      "versions": "Mago 1.60.2; Symfony Config 6.4.50, DependencyInjection 6.4.49, service-contracts 3.8.1, psr/container 2.0.2. Runtime and analyzer checks passed on PHP 8.3 and 8.4; matching CI configured. PHPStan and Psalm themselves were not executed.",
+      "coverage": [
+        "tests/fixtures/ContainerMap.php",
+        "tests/fixtures/ContainerMapNegative.php",
+        "tests/run.php",
+        "tests/runtime.php"
+      ],
+      "status": "covered",
+      "derivation": "Local audit edge case extending the upstream service-id scenario; upstream tests do not assert numeric JSON keys."
+    },
+    {
+      "id": "SYMFONY-C003",
+      "title": "ServiceLocator and ServiceProviderInterface retain mapped types",
+      "sources": [
+        "psalm-container-service",
+        "symfony-service-locator"
+      ],
+      "fixture": "<?php function located(\\Symfony\\Component\\DependencyInjection\\ServiceLocator $c): void { $c->get('shop.greeter')->greet('world'); }",
+      "semantics": "The existing PSR method target also matches ServiceProviderInterface and ServiceLocator overrides. No separate provider is needed.",
+      "analyzer_expectation": "Valid mapped calls pass on both types.",
+      "negative_control": "Missing service methods remain non-existent-method; unknown locator ids remain mixed-method-access.",
+      "priority": "P0",
+      "versions": "Mago 1.60.2; Symfony Config 6.4.50, DependencyInjection 6.4.49, service-contracts 3.8.1, psr/container 2.0.2. Runtime and analyzer checks passed on PHP 8.3 and 8.4; matching CI configured. PHPStan and Psalm themselves were not executed.",
+      "coverage": [
+        "tests/fixtures/ContainerMap.php",
+        "tests/fixtures/ContainerMapNegative.php",
+        "tests/run.php",
+        "tests/runtime.php"
+      ],
+      "status": "covered",
+      "derivation": "The upstream get() contract is adapted to installed Symfony service providers. Audit confirmed existing target inheritance."
+    },
+    {
+      "id": "SYMFONY-C004",
+      "title": "Container invalid-reference flags preserve possible null",
+      "sources": [
+        "psalm-container-service",
+        "symfony-container",
+        "symfony-container-builder"
+      ],
+      "fixture": "<?php function nullable(\\Symfony\\Component\\DependencyInjection\\Container $c): void { $c->get('shop.greeter', \\Symfony\\Component\\DependencyInjection\\Container::RUNTIME_EXCEPTION_ON_INVALID_REFERENCE)?->greet('world'); }",
+      "semantics": "Base Container returns null for an absent service with flags 0, 2, 3 and 4; flag 1 throws. ContainerBuilder throws for both 0 and 1. Interface receivers conservatively include null for flag 0 despite conditional PHPDoc.",
+      "analyzer_expectation": "Flag 1 is non-null. Builder 0|1 unions are non-null. Nullable flags and unknown int values retain possible null; reordered named arguments resolve by name.",
+      "negative_control": "Unguarded nullable accesses report at all eight sites; a missing service method with flag 1 still reports.",
+      "priority": "P0",
+      "versions": "Mago 1.60.2; Symfony Config 6.4.50, DependencyInjection 6.4.49, service-contracts 3.8.1, psr/container 2.0.2. Runtime and analyzer checks passed on PHP 8.3 and 8.4; matching CI configured. PHPStan and Psalm themselves were not executed.",
+      "coverage": [
+        "tests/fixtures/ContainerFlags.php",
+        "tests/fixtures/ContainerFlagsNegative.php",
+        "tests/run.php",
+        "tests/runtime.php"
+      ],
+      "status": "covered",
+      "derivation": "Local runtime-backed flag matrix extends the upstream known-service get() contract and corrects the prototype."
+    },
+    {
+      "id": "SYMFONY-T001",
+      "title": "All built-in node types return through their actual builder",
+      "sources": [
+        "phpstan-tree-builder"
+      ],
+      "fixture": "<?php function nodes(): void { (new \\Symfony\\Component\\Config\\Definition\\Builder\\ArrayNodeDefinition('root'))->children()->integerNode('port')->min(0)->end()->booleanNode('enabled')->defaultTrue(); }",
+      "semantics": "scalar, boolean, integer, float, enum, variable and array nodes have different methods and share the builder parent. node() accepts named type and name arguments.",
+      "analyzer_expectation": "Type each concrete node and return to the builder with end(), including nested array prototypes.",
+      "negative_control": "Call children() on non-array nodes, min() on boolean or array nodes, or values() on an integer node.",
+      "priority": "P0",
+      "versions": "Mago 1.60.2; Symfony Config 6.4.50, DependencyInjection 6.4.49, service-contracts 3.8.1, psr/container 2.0.2. Runtime and analyzer checks passed on PHP 8.3 and 8.4; matching CI configured. PHPStan and Psalm themselves were not executed.",
+      "coverage": [
+        "tests/fixtures/ConfigNodes.php",
+        "tests/fixtures/ConfigNodesNegative.php",
+        "tests/run.php",
+        "tests/runtime.php"
+      ],
+      "status": "covered",
+      "derivation": "Adapted from the pinned PHPStan fluent chain; variableNode and named node() arguments extend its matrix."
+    },
+    {
+      "id": "SYMFONY-T002",
+      "title": "Unknown NodeBuilder parents remain nullable",
+      "sources": [
+        "phpstan-tree-builder",
+        "symfony-node-builder"
+      ],
+      "fixture": "<?php function unparented(): void { (new \\Symfony\\Component\\Config\\Definition\\Builder\\NodeBuilder())->end(); }",
+      "semantics": "A standalone NodeBuilder and a node produced by that unparented builder end at null. A provider cannot distinguish an unknown externally parented builder from a standalone one.",
+      "analyzer_expectation": "Preserve nullable fallback for untracked builders and their children. Tracked children() chains stay precise.",
+      "negative_control": "Dereference end() on a standalone builder or its scalar node. The original custom builder fixture no longer assumes a fabricated array parent.",
+      "priority": "P0",
+      "versions": "Mago 1.60.2; Symfony Config 6.4.50, DependencyInjection 6.4.49, service-contracts 3.8.1, psr/container 2.0.2. Runtime and analyzer checks passed on PHP 8.3 and 8.4; matching CI configured. PHPStan and Psalm themselves were not executed.",
+      "coverage": [
+        "tests/fixtures/ConfigNodes.php",
+        "tests/fixtures/ConfigNodesNegative.php",
+        "tests/fixtures/Configuration.php",
+        "tests/run.php",
+        "tests/runtime.php"
+      ],
+      "status": "covered",
+      "derivation": "Local audit counterexample to the upstream parented end() chains; exact null for standalone construction remains unavailable to this provider."
+    },
+    {
+      "id": "SYMFONY-T003",
+      "title": "Prototypes preserve array parents across end()",
+      "sources": [
+        "phpstan-tree-builder",
+        "psalm-configuration"
+      ],
+      "fixture": "<?php function prototype(): void { (new \\Symfony\\Component\\Config\\Definition\\Builder\\ArrayNodeDefinition('items'))->prototype('enum')->values(['x'])->end()->children(); }",
+      "semantics": "Built-in prototype types and shortcut methods return their concrete node and end() returns the containing array, including uppercase type names.",
+      "analyzer_expectation": "Retain array methods after prototype end(), and return through nested children and node builders.",
+      "negative_control": "After scalarPrototype()->end(), min() is invalid because the receiver is the parent array.",
+      "priority": "P0",
+      "versions": "Mago 1.60.2; Symfony Config 6.4.50, DependencyInjection 6.4.49, service-contracts 3.8.1, psr/container 2.0.2. Runtime and analyzer checks passed on PHP 8.3 and 8.4; matching CI configured. PHPStan and Psalm themselves were not executed.",
+      "coverage": [
+        "tests/fixtures/ConfigNodes.php",
+        "tests/fixtures/ConfigNodesNegative.php",
+        "tests/run.php",
+        "tests/runtime.php"
+      ],
+      "status": "covered",
+      "derivation": "Adapted array and enum prototypes, expanded locally to all seven built-in types and shortcut combinations."
+    },
+    {
+      "id": "SYMFONY-T004",
+      "title": "Root-hook assignment tracking stops at function scopes",
+      "sources": [
+        "phpstan-tree-builder"
+      ],
+      "fixture": "<?php function scopes(): void { $tree = new \\Symfony\\Component\\Config\\Definition\\Builder\\TreeBuilder('root'); $factory = static function () { $tree = new \\Symfony\\Component\\Config\\Definition\\Builder\\TreeBuilder('inner', 'scalar'); return $tree; }; $factory(); $tree->getRootNode()->children(); }",
+      "semantics": "Local assignments and root-variable usages inside another function or closure do not change the outer scope binding.",
+      "analyzer_expectation": "Do not report children() on an outer array root due to an unrelated scalar closure variable. Do not check an unrelated closure parameter as the outer scalar root.",
+      "negative_control": "A nested array TreeBuilder or root assignment must not hide either of the two outer scalar-root children() errors.",
+      "priority": "P0",
+      "versions": "Mago 1.60.2; Symfony Config 6.4.50, DependencyInjection 6.4.49, service-contracts 3.8.1, psr/container 2.0.2. Runtime and analyzer checks passed on PHP 8.3 and 8.4; matching CI configured. PHPStan and Psalm themselves were not executed.",
+      "coverage": [
+        "tests/fixtures/TreeBuilderScopes.php",
+        "tests/fixtures/TreeBuilderScopesNegative.php",
+        "tests/run.php",
+        "tests/runtime.php"
+      ],
+      "status": "covered",
+      "derivation": "Local hook audit regression extending PHPStan non-array-root cases. This does not claim control-flow or by-reference capture analysis."
+    }
+  ]
+}
