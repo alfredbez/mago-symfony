@@ -146,10 +146,20 @@ final class ServiceClassMap
         return $this->classes[$id] ?? null;
     }
 
+    public function hasFactories(): bool
+    {
+        return $this->factories !== [];
+    }
+
     /** @return null|ServiceFactory */
     public function factoryFor(string $id): ?array
     {
         return $this->factories[$id] ?? null;
+    }
+
+    public function hasParameters(): bool
+    {
+        return $this->parameters !== [];
     }
 
     /** @return null|ParameterDescriptor */

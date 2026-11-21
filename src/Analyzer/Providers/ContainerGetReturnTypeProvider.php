@@ -61,8 +61,12 @@ final class ContainerGetReturnTypeProvider implements MethodReturnTypeProvider
     private ?Type $containerBuilderType = null;
     private ?Type $throwingDefaultType = null;
     private ?Type $throwingBuilderType = null;
+    private readonly bool $hasFactories;
 
-    public function __construct(private readonly ServiceClassMap $services) {}
+    public function __construct(private readonly ServiceClassMap $services)
+    {
+        $this->hasFactories = $services->hasFactories();
+    }
 
     public function getTargets(): array
     {
@@ -120,16 +124,17 @@ final class ContainerGetReturnTypeProvider implements MethodReturnTypeProvider
 
     private function resolveServiceType(string $id, ReturnTypeProviderContext $context): ?Type
     {
-        $mappedClass = $this->services->classFor($id);
-        $factory = $this->services->factoryFor($id);
-
-        if ($factory !== null) {
-            $factoryType = $this->resolveFactoryReturnType($factory, $context);
-            if ($factoryType !== null) {
-                return $factoryType;
+        if ($this->hasFactories) {
+            $factory = $this->services->factoryFor($id);
+            if ($factory !== null) {
+                $factoryType = $this->resolveFactoryReturnType($factory, $context);
+                if ($factoryType !== null) {
+                    return $factoryType;
+                }
             }
         }
 
+        $mappedClass = $this->services->classFor($id);
         if ($mappedClass !== null) {
             return $context->codebase->classOrInterfaceExists($mappedClass)
                 ? $this->serviceType($mappedClass)
@@ -185,22 +190,17 @@ final class ContainerGetReturnTypeProvider implements MethodReturnTypeProvider
 
     private function makeNullable(string $cacheKey, Type $serviceType): Type
     {
-        if (count($serviceType->atomicTypes) === 1 && $serviceType->atomicTypes[0] instanceof NamedObjectType && $serviceType->atomicTypes[0]->parameters === null) {
-            $class = $serviceType->atomicTypes[0]->name;
-
-            return $this->nullableServiceTypes[$class] ??= Type::union(
-                $this->serviceType($class),
-                $this->nullType ??= Type::null(),
-            );
+        if (isset($this->nullableServiceTypes[$cacheKey])) {
+            return $this->nullableServiceTypes[$cacheKey];
         }
 
         foreach ($serviceType->atomicTypes as $atomic) {
             if ($atomic instanceof SimpleAtomicType && $atomic->kind === SimpleAtomicTypeKind::Null) {
-                return $serviceType;
+                return $this->nullableServiceTypes[$cacheKey] = $serviceType;
             }
         }
 
-        return Type::union($serviceType, $this->nullType ??= Type::null());
+        return $this->nullableServiceTypes[$cacheKey] = Type::union($serviceType, $this->nullType ??= Type::null());
     }
 
     private function isContainerBuilder(ReturnTypeProviderContext $context): bool

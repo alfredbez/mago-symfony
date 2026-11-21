@@ -33,7 +33,9 @@ final class SymfonyPlugin implements Plugin
         $container = ServiceClassMap::fromEnvironment();
         $registry->enableProviderMemoization();
         $registry->registerMethodReturnTypeProvider(new ContainerGetReturnTypeProvider($container));
-        $registry->registerMethodReturnTypeProvider(new ParameterReturnTypeProvider($container));
+        if ($container->hasParameters()) {
+            $registry->registerMethodReturnTypeProvider(new ParameterReturnTypeProvider($container));
+        }
         $registry->registerMethodReturnTypeProvider(new RootNodeReturnTypeProvider());
         $registry->registerMethodReturnTypeProvider(new ConfigEndReturnTypeProvider());
         $registry->registerMethodCallAnalysisHook(new TreeBuilderRootNodeHook());
