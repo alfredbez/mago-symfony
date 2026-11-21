@@ -135,9 +135,6 @@ final class SymfonyComponentsController extends AbstractController
         return $this->redirectToRoute('app_home');
     }
 
-    /**
-     * @return non-empty-string
-     */
     public function exerciseWave4Contracts(
         HeaderBag $headers,
         FormInterface $form,
@@ -169,20 +166,44 @@ final class SymfonyComponentsController extends AbstractController
         $messages[] = $dto->name;
 
         $dtoList = $serializer->deserialize('[{"name":"ev"}]', DomainEvent::class . '[]', 'json');
-        foreach ($dtoList as $item) {
-            $messages[] = $item->name;
+        foreach ($dtoList as $key => $item) {
+            $messages[$key] = $item->name;
         }
 
         $denormalized = $denormalizer->denormalize(['name' => 'ev'], DomainEvent::class);
         $messages[] = $denormalized->name;
 
-        $denormalizedMatrix = $denormalizer->denormalize([[['name' => 'ev']]], DomainEvent::class . '[][]');
-        foreach ($denormalizedMatrix as $row) {
-            foreach ($row as $cell) {
-                $messages[] = $cell->name;
+        $denormalizedMatrix = $denormalizer->denormalize(['primary' => ['first' => ['name' => 'ev']]], DomainEvent::class . '[][]');
+        foreach ($denormalizedMatrix as $rowKey => $row) {
+            foreach ($row as $cellKey => $cell) {
+                $messages[$rowKey . ':' . $cellKey] = $cell->name;
             }
         }
 
         return $fallbackHeader;
+    }
+}
+
+final class PartialDynamicSetDefinitionCommand extends Command
+{
+    /** @param list<InputOption> $extraOptions */
+    protected function configureWithExtra(array $extraOptions = []): void
+    {
+    }
+
+    protected function configure(): void
+    {
+        $extra = new InputOption('dynamic-extra', null, InputOption::VALUE_NONE);
+        $this->setDefinition([
+            new InputArgument('known', InputArgument::REQUIRED),
+            $extra,
+        ]);
+    }
+
+    protected function execute(InputInterface $input, OutputInterface $output): int
+    {
+        return $input->getArgument('known') !== null && $input->getOption('dynamic-extra') !== null
+            ? Command::SUCCESS
+            : Command::FAILURE;
     }
 }

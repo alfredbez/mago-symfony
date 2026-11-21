@@ -34,35 +34,16 @@ final class HeaderBagGetReturnTypeProvider implements MethodReturnTypeProvider
             return null;
         }
 
-        $allString = true;
-        $allNonEmpty = true;
-        $hasNull = false;
-
         foreach ($defaultType->atomicTypes as $atomic) {
             if ($atomic instanceof SimpleAtomicType && $atomic->kind === SimpleAtomicTypeKind::Null) {
-                $hasNull = true;
-                $allString = false;
-                $allNonEmpty = false;
-                continue;
+                return null;
             }
 
             if (!$atomic instanceof ScalarType || $atomic->kind !== ScalarTypeKind::String) {
                 return null;
             }
-
-            if ($atomic->refinement instanceof ClassLikeStringType) {
-                continue;
-            }
-
-            if (!$atomic->refinement instanceof StringType || !$atomic->refinement->nonEmpty) {
-                $allNonEmpty = false;
-            }
         }
 
-        if ($hasNull || !$allString) {
-            return null;
-        }
-
-        return $allNonEmpty ? Type::nonEmptyString() : Type::string();
+        return Type::string();
     }
 }

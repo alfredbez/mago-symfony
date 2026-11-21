@@ -12,6 +12,7 @@ use Mago\Sdk\Analyzer\Type;
 use Mago\Sdk\Analyzer\Type\ClassLikeStringType;
 use Mago\Sdk\Analyzer\Type\ClassLikeStringVariant;
 use Mago\Sdk\Analyzer\Type\ScalarType;
+use Mago\Sdk\Analyzer\Type\ScalarTypeKind;
 
 /**
  * Resolves the $type argument of SerializerInterface::deserialize() and
@@ -76,8 +77,11 @@ final class SerializerReturnTypeProvider implements MethodReturnTypeProvider
         }
 
         $resolved = Type::namedObject($className);
-        for ($i = 0; $i < $arrayDepth; ++$i) {
-            $resolved = Type::array(Type::int(), $resolved);
+        if ($arrayDepth > 0) {
+            $arrayKey = Type::fromAtomic(new ScalarType(ScalarTypeKind::ArrayKey));
+            for ($i = 0; $i < $arrayDepth; ++$i) {
+                $resolved = Type::array($arrayKey, $resolved);
+            }
         }
 
         return $resolved;

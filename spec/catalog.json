@@ -361,8 +361,8 @@
         "psalm-header-bag"
       ],
       "fixture": "<?php function headerVal(\\Symfony\\Component\\HttpFoundation\\HeaderBag $h): string { return $h->get('X-Correlation-Id', 'fallback'); }",
-      "semantics": "HeaderBag::get($key, $default) returns the string header value when present and $default otherwise. When $default is a non-null string, the result cannot be null.",
-      "analyzer_expectation": "Return non-empty-string when $default is a non-empty string, string when $default is any non-null string, and fall back to Symfony's declared ?string when $default is omitted or nullable.",
+      "semantics": "HeaderBag::get($key, $default) returns the string header value when present and $default otherwise. When $default is a non-null string, the result cannot be null (though an existing header may still be an empty string).",
+      "analyzer_expectation": "Return string when $default is any non-null string, and fall back to Symfony's declared ?string when $default is omitted or nullable.",
       "negative_control": "Calling $headers->get('X-Missing') without a default still reports nullable-return-statement and invalid-return-statement when returned as string.",
       "priority": "P0",
       "versions": "Verified on Mago 1.60.2 / PHP 8.3 against Symfony HttpFoundation 6.4 and 7.x.",
@@ -404,8 +404,8 @@
         "psalm-serializer"
       ],
       "fixture": "<?php function deser(\\Symfony\\Component\\Serializer\\SerializerInterface $s): \\SymfonyFixtureXml\\DomainEvent { return $s->deserialize('{}', \\SymfonyFixtureXml\\DomainEvent::class, 'json'); }",
-      "semantics": "SerializerInterface::deserialize() and DenormalizerInterface::denormalize() hydrate an instance of $type (or an N-dimensional int-keyed array of $type for trailing [] suffixes such as Foo::class . '[]').",
-      "analyzer_expectation": "Resolve literal class names and trailing [] array dimensions to Type::namedObject() or nested Type::array(Type::int(), ...) when the target class exists in the codebase.",
+      "semantics": "SerializerInterface::deserialize() and DenormalizerInterface::denormalize() hydrate an instance of $type (or an N-dimensional array-key-indexed array of $type for trailing [] suffixes such as Foo::class . '[]', preserving both integer and string keys).",
+      "analyzer_expectation": "Resolve literal class names and trailing [] array dimensions to Type::namedObject() or nested Type::array(array-key, ...) when the target class exists in the codebase.",
       "negative_control": "Calling a nonexistent method on a deserialized object or array element reports non-existent-method on DomainEvent; disabling extensions reverts to mixed-assignment and mixed-property-access.",
       "priority": "P0",
       "versions": "Verified on Mago 1.60.2 / PHP 8.3 against Symfony 6.4 and 7.x.",

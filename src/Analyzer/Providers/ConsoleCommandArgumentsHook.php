@@ -215,12 +215,22 @@ final class ConsoleCommandArgumentsHook implements ClassLikeAnalysisHook
             return false;
         }
 
-        $instantiations = $source->getDescendants($defNode, NodeKind::Instantiation);
-        if ($instantiations === []) {
-            return false;
-        }
+        $foundAny = false;
+        foreach ($source->getChildren($defNode) as $element) {
+            if ($element->kind !== NodeKind::ArrayElement) {
+                continue;
+            }
 
-        foreach ($instantiations as $inst) {
+            $variant = $source->getChildren($element)[0] ?? null;
+            if ($variant === null || $variant->kind !== NodeKind::ValueArrayElement) {
+                return false;
+            }
+
+            $inst = $this->unwrap($source, $source->getChildren($variant)[0] ?? null);
+            if ($inst === null || $inst->kind !== NodeKind::Instantiation) {
+                return false;
+            }
+
             $classText = strtolower($source->getText($inst));
             $isArg = str_contains($classText, 'inputargument');
             $isOpt = !$isArg && str_contains($classText, 'inputoption');
@@ -243,9 +253,10 @@ final class ConsoleCommandArgumentsHook implements ClassLikeAnalysisHook
                 }
                 $options[$normalized] = true;
             }
+            $foundAny = true;
         }
 
-        return true;
+        return $foundAny;
     }
 
     private const KNOWN_SAFE_CONFIGURE_METHODS = [
