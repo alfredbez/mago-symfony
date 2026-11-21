@@ -132,6 +132,36 @@
       "kind": "runtime-contract",
       "scope": "Application::getDefaultHelperSet() registers formatter, debug_formatter, process, and question helpers.",
       "sha256": "2d1931c3b518f682df2218b1d419c8a8979eea46316af19f59ccbbaffffc5bf4"
+    },
+    "symfony-constraint-validator": {
+      "url": "https://github.com/symfony/validator/blob/5dfbc8137f26d2ac4fed9645a09821dd2f638fe6/ConstraintValidator.php",
+      "kind": "runtime-contract",
+      "scope": "ConstraintValidator declares protected ExecutionContextInterface $context without a default value and initializes it in initialize().",
+      "sha256": "13c6506d1581603fd76624d96a143d579dfcc8e0ef958167f2d24ef44283c602"
+    },
+    "symfony-input-aware-helper": {
+      "url": "https://github.com/symfony/console/blob/0c0bc13c6d0d2b07e5aa7dbac9a2199d06eac391/Helper/InputAwareHelper.php",
+      "kind": "runtime-contract",
+      "scope": "InputAwareHelper declares protected InputInterface $input without a default value and initializes it in setInput().",
+      "sha256": "4a7a35021ec0ab25bef91d1e5465797b136f0ee7b7b30bd48b9082448ded86c2"
+    },
+    "symfony-parameter-bag": {
+      "url": "https://github.com/symfony/http-foundation/blob/fa85699b69cdd96265bc29425548f087cb2e6ca2/ParameterBag.php",
+      "kind": "runtime-contract",
+      "scope": "ParameterBag::getEnum() returns $default when absent or $class::from($value) otherwise, never null when a non-null default enum is passed.",
+      "sha256": "f7558a8f9aeefed1701cde5f3e1a7085105d3685547b14b4a7914dc3e9d3247c"
+    },
+    "symfony-controller-event": {
+      "url": "https://github.com/symfony/http-kernel/blob/0a4445baad046c120c4a43d152e4ffd69417564d/Event/ControllerEvent.php",
+      "kind": "runtime-contract",
+      "scope": "ControllerEvent::getAttributes($className) returns list<T> for concrete attribute class names, closing Symfony 6.4's list<object> return type.",
+      "sha256": "319d9afd2d17494a3d94566950f0bd5f177af08e7515da0f7f06273c159e2b93"
+    },
+    "symfony-wrapped-exceptions-trait": {
+      "url": "https://github.com/symfony/messenger/blob/33169a0848e0431307418ea73847926f3e7581c0/Exception/WrappedExceptionsTrait.php",
+      "kind": "runtime-contract",
+      "scope": "WrappedExceptionsTrait::getWrappedExceptions($class) filters via is_a() and preserves array-key handler keys, closing Symfony 6.4's Throwable[] return type.",
+      "sha256": "302080859c6c0dcdc8e1dbeaa80c52534217d76a1c66bd2c84b2c47c1478fcc6"
     }
   },
   "cases": [
@@ -619,6 +649,112 @@
       ],
       "status": "covered",
       "derivation": "Clean-room MethodReturnTypeProvider matching Symfony Console Application::getDefaultHelperSet()."
+    },
+    {
+      "id": "SYMFONY-V001",
+      "title": "ConstraintValidator::initialize() and InputAwareHelper::setInput() are recognized as class initializers",
+      "sources": [
+        "symfony-constraint-validator",
+        "symfony-input-aware-helper"
+      ],
+      "fixture": "<?php use Symfony\\Component\\Validator\\Constraint; use Symfony\\Component\\Validator\\ConstraintValidator; final class V extends ConstraintValidator { public function validate(mixed $v, Constraint $c): void { $this->context->buildViolation('bad')->addViolation(); } }",
+      "semantics": "Symfony 7.x declares typed uninitialized properties ConstraintValidator::$context and InputAwareHelper::$input that the framework initializes via initialize() and setInput() before use.",
+      "analyzer_expectation": "Return initialize on ConstraintValidator subclasses and setInput on InputAwareHelper subclasses from RequiredInitializerProvider so check-property-initialization accepts valid subclasses while still reporting user properties that remain uninitialized.",
+      "negative_control": "Wave6UninitializedValidatorNegative and Wave6UninitializedHelperNegative still report missing-constructor; disabling extensions on Symfony 7.4 restores missing-constructor (2) and uninitialized-property (1) on valid subclasses.",
+      "priority": "P0",
+      "versions": "Verified on Mago 1.60.2 / PHP 8.3 against Symfony Validator and Console 6.4 and 7.4.",
+      "coverage": [
+        "tests/fixtures-xml/Wave6ValidatorInitializer.php",
+        "tests/fixtures-xml/Wave6ValidatorInitializerNegative.php",
+        "tests/run.php",
+        "tests/runtime.php"
+      ],
+      "status": "covered",
+      "derivation": "Discovered via Symfony 7.4 empirical probe and corpus census (200 ConstraintValidator subclasses across Symfony, Shopware, Drupal, Mautic, and PrestaShop)."
+    },
+    {
+      "id": "SYMFONY-H005",
+      "title": "ParameterBag::getEnum() and InputBag::getEnum() narrow to non-null BackedEnum for matching non-null defaults",
+      "sources": [
+        "symfony-parameter-bag"
+      ],
+      "fixture": "<?php enum S: string { case A = 'a'; } function e(\\Symfony\\Component\\HttpFoundation\\ParameterBag $b): string { return $b->getEnum('k', S::class, S::A)->value; }",
+      "semantics": "ParameterBag::getEnum($key, $class, $default) and InputBag::getEnum() return $default when the key is missing or null and $class::from($value) otherwise (throwing on invalid values). Symfony 6.4 omits the conditional @psalm-return added in Symfony 7.x.",
+      "analyzer_expectation": "Return the concrete BackedEnum type when $class resolves to a backed enum in the codebase and $default is a guaranteed non-null instance of that same enum; preserve ?T when $default is omitted or nullable.",
+      "negative_control": "Calling getEnum() without a default or with a nullable ?Wave6Status default retains possibly-null-property-access and possibly-null-operand on both Symfony 6.4 and 7.4.",
+      "priority": "P1",
+      "versions": "Verified on Mago 1.60.2 / PHP 8.3 against Symfony HttpFoundation 6.4 and 7.4.",
+      "coverage": [
+        "tests/fixtures-xml/Wave6Contracts.php",
+        "tests/fixtures-xml/Wave6ContractsNegative.php",
+        "tests/run.php",
+        "tests/runtime.php"
+      ],
+      "status": "covered",
+      "derivation": "Clean-room MethodReturnTypeProvider closing Symfony 6.4's missing conditional @psalm-return on ParameterBag and InputBag."
+    },
+    {
+      "id": "SYMFONY-H006",
+      "title": "Request::getPreferredLanguage() narrows to string for non-empty 0-indexed string lists",
+      "sources": [
+        "symfony-request"
+      ],
+      "fixture": "<?php function lang(\\Symfony\\Component\\HttpFoundation\\Request $r): string { return $r->getPreferredLanguage(['en', 'de']); }",
+      "semantics": "Request::getPreferredLanguage($locales) returns $preferredLanguages[0] ?? $locales[0] whenever $locales is non-empty. Only a non-empty 0-indexed list of strings guarantees $locales[0] exists and is a string; associative arrays, empty lists, and omitted/nullable arguments can return null.",
+      "analyzer_expectation": "Return string strictly when $locales is a non-empty list of strings (or keyed array with required integer key 0 and string values); preserve ?string for omitted, empty, nullable, possibly-empty list, or associative array arguments.",
+      "negative_control": "Calling getPreferredLanguage() with no args, [], list<string>, or ['a' => 'en', 'b' => 'de'] retains all 4 possibly-null-operand diagnostics; disabling extensions restores 3 possibly-null-operand errors on valid non-empty lists.",
+      "priority": "P1",
+      "versions": "Verified on Mago 1.60.2 / PHP 8.3 against Symfony HttpFoundation 6.4 and 7.4.",
+      "coverage": [
+        "tests/fixtures-xml/Wave6Contracts.php",
+        "tests/fixtures-xml/Wave6ContractsNegative.php",
+        "tests/run.php",
+        "tests/runtime.php"
+      ],
+      "status": "covered",
+      "derivation": "Clean-room MethodReturnTypeProvider closing a live ?string gap present on both Symfony 6.4 and Symfony 7.4."
+    },
+    {
+      "id": "SYMFONY-K004",
+      "title": "ControllerEvent::getAttributes() and ControllerArgumentsEvent::getAttributes() narrow to list<T>",
+      "sources": [
+        "symfony-controller-event"
+      ],
+      "fixture": "<?php function attrs(\\Symfony\\Component\\HttpKernel\\Event\\ControllerEvent $e): void { foreach ($e->getAttributes(\\SymfonyFixtureXml\\Wave6MarkerAttribute::class) as $a) { $a->describe(); } }",
+      "semantics": "ControllerEvent::getAttributes($className) and ControllerArgumentsEvent::getAttributes($className) index attribute instances by class name and return list<T> for any concrete $className. Symfony 6.4 declares list<object> instead of list<T>.",
+      "analyzer_expectation": "Return list<T> when $className is a non-null class or interface existing in the codebase; delegate omitted, null, or nullable arguments to Symfony's declared return type.",
+      "negative_control": "Calling an unknown method on an iterated attribute reports non-existent-method on Wave6MarkerAttribute; disabling extensions on Symfony 6.4 restores ambiguous-object-method-access on object.",
+      "priority": "P1",
+      "versions": "Verified on Mago 1.60.2 / PHP 8.3 against Symfony HttpKernel 6.4 and 7.4.",
+      "coverage": [
+        "tests/fixtures-xml/Wave6Contracts.php",
+        "tests/fixtures-xml/Wave6ContractsNegative.php",
+        "tests/run.php",
+        "tests/runtime.php"
+      ],
+      "status": "covered",
+      "derivation": "Clean-room MethodReturnTypeProvider closing Symfony 6.4's list<object> return type on ControllerEvent and ControllerArgumentsEvent."
+    },
+    {
+      "id": "SYMFONY-M002",
+      "title": "WrappedExceptionsInterface::getWrappedExceptions() narrows to array<array-key, T> for concrete class filters",
+      "sources": [
+        "symfony-wrapped-exceptions-trait"
+      ],
+      "fixture": "<?php function errs(\\Symfony\\Component\\Messenger\\Exception\\HandlerFailedException $e): void { foreach ($e->getWrappedExceptions(\\SymfonyFixtureXml\\Wave6DomainException::class) as $x) { $x->domainCode(); } }",
+      "semantics": "WrappedExceptionsTrait::getWrappedExceptions($class) filters wrapped exceptions with is_a() when $class is non-empty and preserves array-key handler names via array_merge(). Symfony 6.4 declares Throwable[] without a @template parameter.",
+      "analyzer_expectation": "Target WrappedExceptionsInterface, WrappedExceptionsTrait, HandlerFailedException, and DelayedMessageHandlingException and return array<array-key, T> when $class resolves to an existing class or interface; leave omitted, null, or empty-string arguments unchanged.",
+      "negative_control": "Calling an unknown method on a filtered exception reports non-existent-method on Wave6DomainException; disabling extensions on Symfony 6.4 restores non-existent-method on Throwable.",
+      "priority": "P1",
+      "versions": "Verified on Mago 1.60.2 / PHP 8.3 against Symfony Messenger 6.4 and 7.4.",
+      "coverage": [
+        "tests/fixtures-xml/Wave6Contracts.php",
+        "tests/fixtures-xml/Wave6ContractsNegative.php",
+        "tests/run.php",
+        "tests/runtime.php"
+      ],
+      "status": "covered",
+      "derivation": "Clean-room MethodReturnTypeProvider closing Symfony 6.4's untemplated Throwable[] return type on WrappedExceptionsInterface and WrappedExceptionsTrait."
     }
   ]
 }

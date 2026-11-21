@@ -44,7 +44,7 @@ foreach ($catalog['cases'] as $case) {
         continue;
     }
     $id = $case['id'] ?? '';
-    if (!is_string($id) || preg_match('/^SYMFONY-[CTKHSFU][0-9]{3}$/', $id) !== 1 || isset($ids[$id])) {
+    if (!is_string($id) || preg_match('/^SYMFONY-[CTKHSFUVM][0-9]{3}$/', $id) !== 1 || isset($ids[$id])) {
         $failures[] = 'Invalid or duplicate case ID';
         continue;
     }
