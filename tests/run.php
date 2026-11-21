@@ -495,8 +495,8 @@ $xmlExpected = [
             'possibly-null-argument' => 1,
         ],
         'tests/fixtures-xml/ConsoleCommandNegative.php' => [
-            'alfredbez/symfony/unknown-console-argument' => 1,
-            'alfredbez/symfony/unknown-console-option' => 1,
+            'alfredbez/symfony/unknown-console-argument' => 2,
+            'alfredbez/symfony/unknown-console-option' => 2,
         ],
     ],
     true => [
@@ -531,6 +531,8 @@ foreach ([false => 'xml with extension', true => 'xml --no-extensions'] as $disa
 }
 $failures += assertMessageCount('xml with extension', $xmlWith, 'tests/fixtures-xml/ConsoleCommandNegative.php', 'alfredbez/symfony/unknown-console-argument', 'user_name', 1);
 $failures += assertMessageCount('xml with extension', $xmlWith, 'tests/fixtures-xml/ConsoleCommandNegative.php', 'alfredbez/symfony/unknown-console-option', 'dryrun', 1);
+$failures += assertMessageCount('xml with extension', $xmlWith, 'tests/fixtures-xml/ConsoleCommandNegative.php', 'alfredbez/symfony/unknown-console-argument', 'missing_target', 1);
+$failures += assertMessageCount('xml with extension', $xmlWith, 'tests/fixtures-xml/ConsoleCommandNegative.php', 'alfredbez/symfony/unknown-console-option', 'missing_force', 1);
 
 if ($failures > 0) {
     fwrite(STDERR, "\n{$failures} assertion(s) failed\n");

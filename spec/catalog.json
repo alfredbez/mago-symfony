@@ -48,6 +48,12 @@
       "kind": "runtime-contract",
       "scope": "Symfony 6.4.49. ServiceLocator implements ServiceProviderInterface and overrides get().",
       "sha256": "fdcfe194779abdf7e2ea3b3dc21ec6d1ea738579d3c2fe5cf53712c4bd3deafa"
+    },
+    "psalm-console-option": {
+      "url": "https://github.com/psalm/psalm-plugin-symfony/blob/54cdc276ad62386bb31a97bdfbfa22c04169fd45/tests/acceptance/acceptance/console/ConsoleOption.feature",
+      "kind": "analyzer-test",
+      "scope": "Console options declared via addOption('--name') with leading dashes and setDefinition([...]).",
+      "sha256": "52da8180ebd5fd0df13bc80063db23757e52766c2da251ef3b13e4ec8cdb4b76"
     }
   },
   "cases": [
@@ -300,18 +306,20 @@
       "id": "SYMFONY-K001",
       "title": "Console commands validate literal getArgument and getOption names against configure()",
       "sources": [
-        "symfony-container"
+        "symfony-container",
+        "psalm-console-option"
       ],
       "fixture": "<?php use Symfony\\Component\\Console\\Command\\Command; use Symfony\\Component\\Console\\Input\\InputArgument; use Symfony\\Component\\Console\\Input\\InputInterface; use Symfony\\Component\\Console\\Output\\OutputInterface; final class Cmd extends Command { protected function configure(): void { $this->addArgument('username', InputArgument::REQUIRED); } protected function execute(InputInterface $in, OutputInterface $out): int { return $in->getArgument('username') !== null ? 0 : 1; } }",
-      "semantics": "Commands declaring static arguments and options in configure() without calling parent::configure() or setDefinition() fail at runtime when execute() requests an undeclared name.",
-      "analyzer_expectation": "Report unknown-console-argument and unknown-console-option for undeclared literal names on InputInterface receivers, while accepting standard Application options and skipping inherited or dynamic definitions.",
-      "negative_control": "TypoCommand reports both unknown-console-argument and unknown-console-option; ValidatedCommand and InheritedCommand produce zero issues; disabling extensions removes both diagnostics.",
-      "priority": "P1",
-      "versions": "Verified on Mago 1.60.2 / PHP 8.3 against Symfony Console 6.4 and 7.x.",
+      "semantics": "Commands declaring static arguments and options in configure() via addArgument(), addOption() (including leading -- prefixes stripped by InputOption), or setDefinition([new InputArgument(...), new InputOption(...)]) fail at runtime when execute() requests an undeclared name.",
+      "analyzer_expectation": "Report unknown-console-argument and unknown-console-option for undeclared literal names on InputInterface receivers, normalize leading dashes on option names, extract literal InputArgument/InputOption entries from setDefinition([...]), accept standard Application options, and skip inherited or dynamic definitions.",
+      "negative_control": "TypoCommand and SetDefinitionTypoCommand report unknown-console-argument and unknown-console-option; ValidatedCommand (--bypass-locking), SetDefinitionCommand, and InheritedCommand produce zero issues; disabling extensions removes all four diagnostics.",
+      "priority": "P0",
+      "versions": "Verified on Mago 1.60.2 / PHP 8.3 against Symfony Console 6.4 and 7.x and Mautic 7.2.2.",
       "coverage": [
         "tests/fixtures-xml/SymfonyComponents.php",
         "tests/fixtures-xml/ConsoleCommandNegative.php",
-        "tests/run.php"
+        "tests/run.php",
+        "tests/runtime.php"
       ],
       "status": "covered",
       "derivation": "Mago SDK ReturnTypeProviderContext does not expose enclosing Command class, so static validation runs via ClassLikeAnalysisHook on Command descendants."

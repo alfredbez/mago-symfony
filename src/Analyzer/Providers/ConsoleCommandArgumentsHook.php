@@ -100,7 +100,10 @@ final class ConsoleCommandArgumentsHook implements ClassLikeAnalysisHook
         foreach ($source->getDescendants($configure, NodeKind::MethodCall) as $call) {
             $methodName = strtolower($this->calledMethodName($source, $call) ?? '');
             if ($methodName === 'setdefinition') {
-                return null;
+                if (!$this->extractSetDefinitionInputs($source, $call, $arguments, $options)) {
+                    return null;
+                }
+                continue;
             }
 
             if ($methodName !== 'addargument' && $methodName !== 'addoption') {
@@ -122,7 +125,11 @@ final class ConsoleCommandArgumentsHook implements ClassLikeAnalysisHook
             if ($methodName === 'addargument') {
                 $arguments[$literal] = true;
             } else {
-                $options[$literal] = true;
+                $normalizedOption = ltrim($literal, '-');
+                if ($normalizedOption === '') {
+                    return null;
+                }
+                $options[$normalizedOption] = true;
             }
         }
 
@@ -176,8 +183,8 @@ final class ConsoleCommandArgumentsHook implements ClassLikeAnalysisHook
                     ),
                 );
             } elseif ($called === 'getoption' && $options !== [] && !isset($options[$name])) {
-                // Standard Symfony Application options are always defined on every command.
-                if (isset(self::DEFAULT_APPLICATION_OPTIONS[$name])) {
+                $normalizedLookup = ltrim($name, '-');
+                if (isset($options[$normalizedLookup]) || isset(self::DEFAULT_APPLICATION_OPTIONS[$normalizedLookup])) {
                     continue;
                 }
                 $context->report(
@@ -190,6 +197,55 @@ final class ConsoleCommandArgumentsHook implements ClassLikeAnalysisHook
                 );
             }
         }
+    }
+
+    /**
+     * @param array<string, true> $arguments
+     * @param array<string, true> $options
+     */
+    private function extractSetDefinitionInputs(
+        SourceFile $source,
+        Node $call,
+        array &$arguments,
+        array &$options,
+    ): bool {
+        $defArg = $this->firstCallArgument($source, $call, 'definition');
+        $defNode = $this->unwrap($source, $defArg);
+        if ($defNode === null || ($defNode->kind !== NodeKind::Array && $defNode->kind !== NodeKind::LegacyArray)) {
+            return false;
+        }
+
+        $instantiations = $source->getDescendants($defNode, NodeKind::Instantiation);
+        if ($instantiations === []) {
+            return false;
+        }
+
+        foreach ($instantiations as $inst) {
+            $classText = strtolower($source->getText($inst));
+            $isArg = str_contains($classText, 'inputargument');
+            $isOpt = !$isArg && str_contains($classText, 'inputoption');
+            if (!$isArg && !$isOpt) {
+                return false;
+            }
+
+            $firstArg = $this->firstCallArgument($source, $inst, 'name');
+            $literal = $firstArg !== null ? $this->extractLiteralString($source, $firstArg) : null;
+            if ($literal === null || $literal === '') {
+                return false;
+            }
+
+            if ($isArg) {
+                $arguments[$literal] = true;
+            } else {
+                $normalized = ltrim($literal, '-');
+                if ($normalized === '') {
+                    return false;
+                }
+                $options[$normalized] = true;
+            }
+        }
+
+        return true;
     }
 
     private const KNOWN_SAFE_CONFIGURE_METHODS = [

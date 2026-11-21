@@ -109,4 +109,7 @@ check($loaded->parameterFor('app.name') === ['kind' => 'string', 'value' => 'sho
 check($loaded->parameterFor('app.retries') === ['kind' => 'int', 'value' => 3], 'XmlDumper int parameter resolved');
 check($loaded->parameterFor('app.debug') === ['kind' => 'bool', 'value' => true], 'XmlDumper bool parameter resolved');
 
+$prefixedOption = new \Symfony\Component\Console\Input\InputOption('--bypass-locking', null, \Symfony\Component\Console\Input\InputOption::VALUE_NONE);
+check($prefixedOption->getName() === 'bypass-locking', 'InputOption strips leading dashes from option names at runtime');
+
 fwrite(STDOUT, "Symfony runtime contracts PASS\n\n");

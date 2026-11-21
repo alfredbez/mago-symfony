@@ -29,14 +29,35 @@ class ValidatedCommand extends Command
     {
         $this
             ->addArgument('username', InputArgument::REQUIRED)
-            ->addOption('dry-run', null, InputOption::VALUE_NONE);
+            ->addOption('dry-run', null, InputOption::VALUE_NONE)
+            ->addOption('--bypass-locking', null, InputOption::VALUE_NONE);
     }
 
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
         return $input->getArgument('username') !== null
             && $input->getOption('dry-run') !== null
+            && $input->getOption('bypass-locking') !== null
             && $input->getOption('verbose') !== null
+            ? Command::SUCCESS
+            : Command::FAILURE;
+    }
+}
+
+final class SetDefinitionCommand extends Command
+{
+    protected function configure(): void
+    {
+        $this->setDefinition([
+            new InputArgument('target', InputArgument::REQUIRED),
+            new InputOption('--force', 'f', InputOption::VALUE_NONE),
+        ]);
+    }
+
+    protected function execute(InputInterface $input, OutputInterface $output): int
+    {
+        return $input->getArgument('target') !== null
+            && $input->getOption('force') !== null
             ? Command::SUCCESS
             : Command::FAILURE;
     }
