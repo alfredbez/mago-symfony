@@ -21,10 +21,13 @@ $failures = 0;
 
 $version = trim(run([PHP_BINARY, 'vendor/bin/mago', '--version'])['stdout']);
 fwrite(STDOUT, $version . "\n\n");
-if ($version !== 'mago 1.60.2') {
-    fwrite(STDERR, "The fixture expectations require Mago 1.60.2\n");
+if (preg_match('/^mago (\d+\.\d+\.\d+)/', $version, $versionMatch) !== 1 || version_compare($versionMatch[1], '1.60.2', '<')) {
+    fwrite(STDERR, "The fixture expectations require Mago 1.60.2 or newer\n");
     exit(1);
 }
+$magoVersion = $versionMatch[1];
+// Mago 1.61.0 evaluates Symfony ContainerInterface::get()'s @template B constraint and nested conditional @return.
+$magoAtLeast161 = version_compare($magoVersion, '1.61.0', '>=');
 
 $validated = run([PHP_BINARY, 'vendor/bin/mago', 'extension', 'validate']);
 fwrite(STDOUT, "extension validate (exit {$validated['exit']}):\n");
@@ -91,10 +94,17 @@ $expected = [
             ],
         'tests/fixtures/ContainerUsage.php' => [],
         'tests/fixtures/ContainerFlags.php' => [],
-        'tests/fixtures/ContainerFlagsNegative.php' => [
-            'non-existent-method' => 1,
-            'possible-method-access-on-null' => 8,
-        ],
+        'tests/fixtures/ContainerFlagsNegative.php' => $magoAtLeast161
+            ? [
+                'non-existent-method' => 1,
+                'possible-method-access-on-null' => 8,
+                'possibly-invalid-argument' => 1,
+                'template-constraint-violation' => 1,
+            ]
+            : [
+                'non-existent-method' => 1,
+                'possible-method-access-on-null' => 8,
+            ],
         'tests/fixtures/ContainerMap.php' => [],
         'tests/fixtures/ContainerMapNegative.php' => [
             'mixed-method-access' => 2,
@@ -181,14 +191,26 @@ $expected = [
                 'non-existent-method' => 15,
                 'possible-method-access-on-null' => 3,
             ],
-        'tests/fixtures/ContainerFlags.php' => [
-            'ambiguous-object-method-access' => 8,
-            'possible-method-access-on-null' => 3,
-        ],
-        'tests/fixtures/ContainerFlagsNegative.php' => [
-            'ambiguous-object-method-access' => 9,
-            'possible-method-access-on-null' => 8,
-        ],
+        'tests/fixtures/ContainerFlags.php' => $magoAtLeast161
+            ? [
+                'ambiguous-object-method-access' => 8,
+                'redundant-nullsafe-operator' => 1,
+            ]
+            : [
+                'ambiguous-object-method-access' => 8,
+                'possible-method-access-on-null' => 3,
+            ],
+        'tests/fixtures/ContainerFlagsNegative.php' => $magoAtLeast161
+            ? [
+                'ambiguous-object-method-access' => 9,
+                'possible-method-access-on-null' => 5,
+                'possibly-invalid-argument' => 1,
+                'template-constraint-violation' => 1,
+            ]
+            : [
+                'ambiguous-object-method-access' => 9,
+                'possible-method-access-on-null' => 8,
+            ],
         'tests/fixtures/ContainerMap.php' => [
             'mixed-method-access' => 4,
             'mixed-return-statement' => 1,
@@ -197,14 +219,22 @@ $expected = [
             'mixed-method-access' => 6,
         ],
         // ContainerInterface::get() is mixed or ?object without the extension.
-        'tests/fixtures/ContainerUsage.php' => [
-            'ambiguous-object-method-access' => 6,
-            'mixed-assignment' => 2,
-            'mixed-method-access' => 5,
-            'mixed-return-statement' => 1,
-            'possible-method-access-on-null' => 2,
-            'redundant-nullsafe-operator' => 1,
-        ],
+        'tests/fixtures/ContainerUsage.php' => $magoAtLeast161
+            ? [
+                'ambiguous-object-method-access' => 6,
+                'mixed-assignment' => 2,
+                'mixed-method-access' => 5,
+                'mixed-return-statement' => 1,
+                'redundant-nullsafe-operator' => 1,
+            ]
+            : [
+                'ambiguous-object-method-access' => 6,
+                'mixed-assignment' => 2,
+                'mixed-method-access' => 5,
+                'mixed-return-statement' => 1,
+                'possible-method-access-on-null' => 2,
+                'redundant-nullsafe-operator' => 1,
+            ],
         'tests/fixtures/ContainerNegative.php' => [
             'ambiguous-object-method-access' => 4,
             'mixed-method-access' => 2,
@@ -286,14 +316,13 @@ $sites = [
     false => [
         'tests/fixtures/TreeBuilderScopes.php' => [],
         'tests/fixtures/TreeBuilderScopesNegative.php' => [
-            '19:alfredbez/symfony/invalid-root-node-method',
-            '31:alfredbez/symfony/invalid-root-node-method',
+            '20:alfredbez/symfony/invalid-root-node-method',
+            '32:alfredbez/symfony/invalid-root-node-method',
         ],
         'tests/fixtures/ConfigNodes.php' => [],
         'tests/fixtures/ConfigNodesNegative.php' => [
-            $isSymfony7 ? '13:method-access-on-null' : '13:possible-method-access-on-null',
             $isSymfony7 ? '14:method-access-on-null' : '14:possible-method-access-on-null',
-            '20:non-existent-method',
+            $isSymfony7 ? '15:method-access-on-null' : '15:possible-method-access-on-null',
             '21:non-existent-method',
             '22:non-existent-method',
             '23:non-existent-method',
@@ -301,97 +330,96 @@ $sites = [
             '25:non-existent-method',
             '26:non-existent-method',
             '27:non-existent-method',
+            '28:non-existent-method',
         ],
         'tests/fixtures/ContainerFlags.php' => [],
         'tests/fixtures/ContainerFlagsNegative.php' => [
-            '14:possible-method-access-on-null',
             '15:possible-method-access-on-null',
             '16:possible-method-access-on-null',
-            '21:possible-method-access-on-null',
+            '17:possible-method-access-on-null',
             '22:possible-method-access-on-null',
             '23:possible-method-access-on-null',
             '24:possible-method-access-on-null',
             '25:possible-method-access-on-null',
-            '30:non-existent-method',
+            '26:possible-method-access-on-null',
+            ...($magoAtLeast161 ? ['26:possibly-invalid-argument', '26:template-constraint-violation'] : []),
+            '31:non-existent-method',
         ],
         'tests/fixtures/ContainerMap.php' => [],
         'tests/fixtures/ContainerMapNegative.php' => [
-            '14:non-existent-method', '15:non-existent-method', '20:mixed-method-access',
-            '25:non-existent-method', '26:non-existent-method', '27:mixed-method-access',
+            '15:non-existent-method', '16:non-existent-method', '21:mixed-method-access',
+            '26:non-existent-method', '27:non-existent-method', '28:mixed-method-access',
         ],
     ],
     true => [
         'tests/fixtures/TreeBuilderScopes.php' => $isSymfony7
-            ? array_fill(0, 8, '19:non-existent-method')
+            ? array_fill(0, 8, '20:non-existent-method')
             : [
-                '19:non-existent-method',
+                '20:non-existent-method',
             ],
         'tests/fixtures/TreeBuilderScopesNegative.php' => $isSymfony7
             ? [
-                '16:invalid-return-statement',
-                ...array_fill(0, 8, '19:non-existent-method'),
-                ...array_fill(0, 8, '31:non-existent-method'),
+                '17:invalid-return-statement',
+                ...array_fill(0, 8, '20:non-existent-method'),
+                ...array_fill(0, 8, '32:non-existent-method'),
             ]
             : [
-                '19:non-existent-method',
-                '31:non-existent-method',
+                '20:non-existent-method',
+                '32:non-existent-method',
             ],
         'tests/fixtures/ConfigNodes.php' => $isSymfony7
-            ? array_fill(0, 6, '20:non-existent-method')
+            ? array_fill(0, 6, '21:non-existent-method')
             : [
-                '14:non-existent-method',
-                '14:non-existent-method',
-                '12:possible-method-access-on-null',
-                '14:non-existent-method',
-                '14:non-existent-method',
                 '15:non-existent-method',
                 '15:non-existent-method',
-                '12:possible-method-access-on-null',
+                '13:possible-method-access-on-null',
                 '15:non-existent-method',
                 '15:non-existent-method',
                 '16:non-existent-method',
                 '16:non-existent-method',
-                '12:possible-method-access-on-null',
+                '13:possible-method-access-on-null',
                 '16:non-existent-method',
                 '16:non-existent-method',
                 '17:non-existent-method',
                 '17:non-existent-method',
-                '12:possible-method-access-on-null',
+                '13:possible-method-access-on-null',
                 '17:non-existent-method',
                 '17:non-existent-method',
                 '18:non-existent-method',
                 '18:non-existent-method',
-                '12:possible-method-access-on-null',
+                '13:possible-method-access-on-null',
                 '18:non-existent-method',
                 '18:non-existent-method',
                 '19:non-existent-method',
                 '19:non-existent-method',
-                '12:possible-method-access-on-null',
+                '13:possible-method-access-on-null',
                 '19:non-existent-method',
                 '19:non-existent-method',
-                '19:non-existent-method',
-                '20:mixed-method-access',
-                '20:mixed-method-access',
-                '20:mixed-method-access',
+                '20:non-existent-method',
+                '20:non-existent-method',
+                '13:possible-method-access-on-null',
+                '20:non-existent-method',
+                '20:non-existent-method',
+                '20:non-existent-method',
                 '21:mixed-method-access',
                 '21:mixed-method-access',
                 '21:mixed-method-access',
                 '22:mixed-method-access',
-                '12:mixed-return-statement',
-                '29:non-existent-method',
-                '29:non-existent-method',
-                '27:possible-method-access-on-null',
-                '29:non-existent-method',
-                '29:non-existent-method',
+                '22:mixed-method-access',
+                '22:mixed-method-access',
+                '23:mixed-method-access',
+                '13:mixed-return-statement',
                 '30:non-existent-method',
                 '30:non-existent-method',
-                '27:possible-method-access-on-null',
+                '28:possible-method-access-on-null',
                 '30:non-existent-method',
                 '30:non-existent-method',
-                '30:non-existent-method',
-                '30:mixed-method-access',
-                '31:mixed-method-access',
-                '31:mixed-method-access',
+                '31:non-existent-method',
+                '31:non-existent-method',
+                '28:possible-method-access-on-null',
+                '31:non-existent-method',
+                '31:non-existent-method',
+                '31:non-existent-method',
                 '31:mixed-method-access',
                 '32:mixed-method-access',
                 '32:mixed-method-access',
@@ -402,15 +430,17 @@ $sites = [
                 '34:mixed-method-access',
                 '34:mixed-method-access',
                 '34:mixed-method-access',
-                '34:mixed-method-access',
-                '34:mixed-method-access',
-                '34:mixed-method-access',
-                '27:mixed-return-statement',
+                '35:mixed-method-access',
+                '35:mixed-method-access',
+                '35:mixed-method-access',
+                '35:mixed-method-access',
+                '35:mixed-method-access',
+                '35:mixed-method-access',
+                '28:mixed-return-statement',
             ],
         'tests/fixtures/ConfigNodesNegative.php' => $isSymfony7
             ? [
-                '13:method-access-on-null',
-                '20:non-existent-method',
+                '14:method-access-on-null',
                 '21:non-existent-method',
                 '22:non-existent-method',
                 '23:non-existent-method',
@@ -418,14 +448,14 @@ $sites = [
                 '25:non-existent-method',
                 '26:non-existent-method',
                 '27:non-existent-method',
+                '28:non-existent-method',
             ]
             : [
-                '14:non-existent-method',
-                '14:non-existent-method',
-                '14:possible-method-access-on-null',
-                '14:non-existent-method',
-                '14:non-existent-method',
-                '20:non-existent-method',
+                '15:non-existent-method',
+                '15:non-existent-method',
+                '15:possible-method-access-on-null',
+                '15:non-existent-method',
+                '15:non-existent-method',
                 '21:non-existent-method',
                 '22:non-existent-method',
                 '23:non-existent-method',
@@ -433,51 +463,83 @@ $sites = [
                 '25:non-existent-method',
                 '26:non-existent-method',
                 '27:non-existent-method',
-                '27:non-existent-method',
-                '27:possible-method-access-on-null',
-                '27:non-existent-method',
-                '27:non-existent-method',
-                '27:non-existent-method',
+                '28:non-existent-method',
+                '28:non-existent-method',
+                '28:possible-method-access-on-null',
+                '28:non-existent-method',
+                '28:non-existent-method',
+                '28:non-existent-method',
             ],
-        'tests/fixtures/ContainerFlags.php' => [
-            '14:ambiguous-object-method-access',
-            '14:possible-method-access-on-null',
-            '15:ambiguous-object-method-access',
-            '21:ambiguous-object-method-access',
-            '21:possible-method-access-on-null',
-            '22:ambiguous-object-method-access',
-            '22:possible-method-access-on-null',
-            '27:ambiguous-object-method-access',
-            '28:ambiguous-object-method-access',
-            '29:ambiguous-object-method-access',
-            '30:ambiguous-object-method-access',
-        ],
-        'tests/fixtures/ContainerFlagsNegative.php' => [
-            '14:ambiguous-object-method-access',
-            '14:possible-method-access-on-null',
-            '15:ambiguous-object-method-access',
-            '16:ambiguous-object-method-access',
-            '16:possible-method-access-on-null',
-            '21:ambiguous-object-method-access',
-            '21:possible-method-access-on-null',
-            '22:ambiguous-object-method-access',
-            '22:possible-method-access-on-null',
-            '23:ambiguous-object-method-access',
-            '23:possible-method-access-on-null',
-            '24:ambiguous-object-method-access',
-            '24:possible-method-access-on-null',
-            '25:ambiguous-object-method-access',
-            '25:possible-method-access-on-null',
-            '30:ambiguous-object-method-access',
-            '30:possible-method-access-on-null',
-        ],
+        'tests/fixtures/ContainerFlags.php' => $magoAtLeast161
+            ? [
+                '15:ambiguous-object-method-access',
+                '16:ambiguous-object-method-access',
+                '22:ambiguous-object-method-access',
+                '23:ambiguous-object-method-access',
+                '28:ambiguous-object-method-access',
+                '28:redundant-nullsafe-operator',
+                '29:ambiguous-object-method-access',
+                '30:ambiguous-object-method-access',
+                '31:ambiguous-object-method-access',
+            ]
+            : [
+                '15:ambiguous-object-method-access',
+                '15:possible-method-access-on-null',
+                '16:ambiguous-object-method-access',
+                '22:ambiguous-object-method-access',
+                '22:possible-method-access-on-null',
+                '23:ambiguous-object-method-access',
+                '23:possible-method-access-on-null',
+                '28:ambiguous-object-method-access',
+                '29:ambiguous-object-method-access',
+                '30:ambiguous-object-method-access',
+                '31:ambiguous-object-method-access',
+            ],
+        'tests/fixtures/ContainerFlagsNegative.php' => $magoAtLeast161
+            ? [
+                '15:ambiguous-object-method-access',
+                '16:ambiguous-object-method-access',
+                '17:ambiguous-object-method-access',
+                '22:ambiguous-object-method-access',
+                '22:possible-method-access-on-null',
+                '23:ambiguous-object-method-access',
+                '23:possible-method-access-on-null',
+                '24:ambiguous-object-method-access',
+                '24:possible-method-access-on-null',
+                '25:ambiguous-object-method-access',
+                '25:possible-method-access-on-null',
+                '26:ambiguous-object-method-access',
+                '26:possible-method-access-on-null',
+                '26:possibly-invalid-argument',
+                '26:template-constraint-violation',
+                '31:ambiguous-object-method-access',
+            ]
+            : [
+                '15:ambiguous-object-method-access',
+                '15:possible-method-access-on-null',
+                '16:ambiguous-object-method-access',
+                '17:ambiguous-object-method-access',
+                '17:possible-method-access-on-null',
+                '22:ambiguous-object-method-access',
+                '22:possible-method-access-on-null',
+                '23:ambiguous-object-method-access',
+                '23:possible-method-access-on-null',
+                '24:ambiguous-object-method-access',
+                '24:possible-method-access-on-null',
+                '25:ambiguous-object-method-access',
+                '25:possible-method-access-on-null',
+                '26:ambiguous-object-method-access',
+                '26:possible-method-access-on-null',
+                '31:ambiguous-object-method-access',
+                '31:possible-method-access-on-null',
+            ],
         'tests/fixtures/ContainerMap.php' => [
-            '14:mixed-method-access', '14:mixed-return-statement', '19:mixed-method-access',
-            '24:mixed-method-access', '25:mixed-method-access',
+            '15:mixed-method-access', '15:mixed-return-statement', '20:mixed-method-access',
+            '25:mixed-method-access', '26:mixed-method-access',
         ],
         'tests/fixtures/ContainerMapNegative.php' => [
-            '14:mixed-method-access', '15:mixed-method-access', '20:mixed-method-access',
-            '25:mixed-method-access', '26:mixed-method-access', '27:mixed-method-access',
+            '15:mixed-method-access', '16:mixed-method-access', '21:mixed-method-access',
+            '26:mixed-method-access', '27:mixed-method-access', '28:mixed-method-access',
         ],
     ],
 ];
@@ -540,17 +602,17 @@ $xmlExpected = [
     ],
     true => [
         'tests/fixtures-xml/ContainerXmlUsage.php' => [
-            'ambiguous-object-method-access' => 6,
+            'ambiguous-object-method-access' => $magoAtLeast161 ? 7 : 6,
             'invalid-array-access' => 5,
             'less-specific-return-statement' => 1,
             'missing-constructor' => $isSymfony7 ? 1 : 0,
             'mixed-argument' => 4,
             'mixed-array-access' => 2,
             'mixed-assignment' => 1,
-            'mixed-method-access' => 7,
+            'mixed-method-access' => $magoAtLeast161 ? 6 : 7,
             'mixed-operand' => 12,
             'mixed-return-statement' => 1,
-            'possible-method-access-on-null' => 2,
+            'possible-method-access-on-null' => $magoAtLeast161 ? 0 : 2,
             'possibly-invalid-argument' => 7,
             'possibly-invalid-array-access' => 5,
             'possibly-null-argument' => 6,
@@ -572,7 +634,7 @@ $xmlExpected = [
             'ambiguous-object-method-access' => 2,
             'missing-constructor' => $isSymfony7 ? 1 : 0,
             'mixed-method-access' => 4,
-            'possible-method-access-on-null' => 1,
+            'possible-method-access-on-null' => $magoAtLeast161 ? 0 : 1,
             'possibly-invalid-argument' => 4,
             'possibly-null-argument' => 4,
         ],
@@ -788,11 +850,16 @@ function analyze(bool $noExtensions, ?string $config = null): array
             }
         }
 
+        $start = $primary['span']['start'];
+        $line = array_key_exists('column', $start)
+            ? (int) $start['line']
+            : (int) $start['line'] + 1;
+
         $issues[] = [
             'level' => (string) $issue['level'],
             'code' => (string) $issue['code'],
             'file' => (string) $primary['span']['file_id']['name'],
-            'line' => (int) $primary['span']['start']['line'],
+            'line' => $line,
             'message' => (string) $issue['message'],
         ];
     }

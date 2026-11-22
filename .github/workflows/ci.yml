@@ -6,12 +6,21 @@ on:
 
 jobs:
   suite:
+    name: PHP ${{ matrix.php }} / Symfony ${{ matrix.symfony }} / Mago ${{ matrix.mago }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
         php: ["8.3", "8.4"]
         symfony: ["6.4", "7.0"]
+        mago: ["latest"]
+        include:
+          - php: "8.3"
+            symfony: "6.4"
+            mago: "1.60.2"
+          - php: "8.4"
+            symfony: "7.0"
+            mago: "1.60.2"
     steps:
       - uses: actions/checkout@v4
       - uses: shivammathur/setup-php@v2
@@ -22,9 +31,12 @@ jobs:
           tools: composer
       - name: Validate Composer metadata
         run: composer validate --strict
-      - name: Install locked dependencies (Symfony 7)
-        if: matrix.symfony == '7.0'
+      - name: Install locked dependencies (Symfony 7, latest Mago)
+        if: matrix.symfony == '7.0' && matrix.mago == 'latest'
         run: composer install --no-interaction --prefer-dist --no-progress
+      - name: Install Symfony 7 with lowest supported Mago
+        if: matrix.symfony == '7.0' && matrix.mago != 'latest'
+        run: composer update --no-interaction --prefer-dist --no-progress --with="carthage-software/mago:${{ matrix.mago }}"
       - name: Install Symfony 6.4 dependencies
         if: matrix.symfony == '6.4'
         run: |
@@ -43,6 +55,9 @@ jobs:
             "symfony/security-core:^6.4" \
             "symfony/serializer:^6.4" \
             "symfony/validator:^6.4"
+      - name: Pin lowest supported Mago on Symfony 6.4
+        if: matrix.symfony == '6.4' && matrix.mago != 'latest'
+        run: composer update --no-interaction --prefer-dist --no-progress --with="carthage-software/mago:${{ matrix.mago }}"
       - name: Validate conformance catalog
         run: php tests/check-spec.php
       - name: Run runtime and analyzer tests

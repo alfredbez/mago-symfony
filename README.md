@@ -1,11 +1,11 @@
 # alfredbez/mago-symfony
 
-Symfony support for [Mago](https://github.com/carthage-software/mago) 1.60.2 through its PHP extension SDK.
+Symfony support for [Mago](https://github.com/carthage-software/mago) 1.60.2+ through its PHP extension SDK.
 
 ## Supported versions
 
 - PHP `~8.1.0 || ~8.2.0 || ~8.3.0 || ~8.4.0 || ~8.5.0 || ~8.6.0`
-- Mago (`carthage-software/mago`) `~1.60.2`
+- Mago (`carthage-software/mago`) `^1.60.2` (CI tests Mago `1.60.2` and `1.61.0+`)
 - Symfony `^6.4 || ^7.0` (CI tests PHP 8.3 and 8.4 against Symfony 6.4 and Symfony 7.4)
 
 ## Installation and quickstart
@@ -67,12 +67,12 @@ Set any of these variables in the environment that invokes `vendor/bin/mago`:
 - **Configurable Security `getUser()` narrowing.** When `MAGO_SYMFONY_USER_CLASS` is set to a class or interface implementing `UserInterface`, narrows `AbstractController::getUser()`, `Symfony\Bundle\SecurityBundle\Security::getUser()`, `Symfony\Component\Security\Core\Security::getUser()`, and `TokenInterface::getUser()` to `ConfiguredUser|null`.
 - **Framework lifecycle and `#[Required]` class initializers.** Recognizes `AbstractController::setContainer()`, `ConstraintValidator::initialize()`, `InputAwareHelper::setInput()`, and methods carrying `#[Symfony\Contracts\Service\Attribute\Required]` as class initializers when `check-property-initialization = true` is enabled.
 
-## Known Mago 1.60.2 SDK boundaries
+## Known Mago SDK boundaries
 
-- Without a compiled container XML or JSON map, class-name service IDs are a typing convention rather than proof of container registration. `ContainerInterface::has()` cannot narrow subsequent `get()` calls because Mago 1.60.2 `InvocationAssertions` only narrows parameter variables and `$this`.
-- Return-type providers cannot inspect enclosing `Command` class context or `TreeBuilder` constructor AST syntax in Mago 1.60.2. Per-command `InputInterface::getArgument()` and `getOption()` return-type narrowing (`SYMFONY-K002`) is blocked by the Mago 1.60.2 SDK, while `ConsoleCommandArgumentsHook` validates argument and option names plus invalid mode and default definitions.
+- Without a compiled container XML or JSON map, class-name service IDs are a typing convention rather than proof of container registration. `ContainerInterface::has()` cannot narrow subsequent `get()` calls because Mago `1.60.2` through `1.61.0` `InvocationAssertions` narrows only parameter variables and `$this`.
+- Return-type providers cannot inspect enclosing `Command` class context or `TreeBuilder` constructor AST syntax in Mago `1.60.2` through `1.61.0`. Per-command `InputInterface::getArgument()` and `getOption()` return-type narrowing (`SYMFONY-K002`) remains blocked by the Mago SDK, while `ConsoleCommandArgumentsHook` validates argument and option names plus invalid mode and default definitions.
 - `SessionInterface::get()`, `InputBag::get()`, `Route::getDefault()`, and `FormConfigInterface::getOption()` are not narrowed on defaults because stored `null` or user-configured values can bypass defaults at runtime.
-- `Envelope::last()`, `Envelope::all()`, `Request::getContent()`, `FileLocatorInterface::locate()`, `EventDispatcherInterface::dispatch()`, `CacheInterface::get()`, `ValidatorInterface::validate()`, `RouteCollection`, `FormView`, and Twig rendering helpers are already typed natively by Mago 1.60.2 from Symfony 6.4 and 7.4 vendor signatures. `HandledStamp::getResult()` stays `mixed` because compiled container XML does not provide a message-to-handler return graph.
+- `Envelope::last()`, `Envelope::all()`, `Request::getContent()`, `FileLocatorInterface::locate()`, `EventDispatcherInterface::dispatch()`, `CacheInterface::get()`, `ValidatorInterface::validate()`, `RouteCollection`, `FormView`, and Twig rendering helpers are already typed natively by Mago `1.60.2` through `1.61.0` from Symfony 6.4 and 7.4 vendor signatures. `HandledStamp::getResult()` stays `mixed` because compiled container XML does not provide a message-to-handler return graph.
 - `HelperSet::get()` and `Command::getHelper()` narrowing assumes Symfony Console's four default helper names (`formatter`, `debug_formatter`, `process`, `question`) are not remapped to unrelated classes at runtime.
 - `ControllerEvent::getAttributes($className)` narrowing matches Symfony 7.4's own `@return list<T>` contract and assumes pre-computed `$attributes` maps passed to `setController()` match their class keys.
 - `WrappedExceptionsInterface::getWrappedExceptions($class)` narrows only `Throwable` subtypes (matching Symfony 7.4's `@template TException of \Throwable`) so non-`Throwable` marker interfaces retain `Throwable` methods.

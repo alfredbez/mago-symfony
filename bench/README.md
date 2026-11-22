@@ -9,7 +9,7 @@ Regenerate fixtures and the 256-entry container map with:
 python3 bench/generate-fixtures.py
 ```
 
-Run local measurements with PHP 8.4 and Mago 1.60.2:
+Run local measurements with PHP 8.4 and Mago 1.60.2+:
 
 ```bash
 docker run --rm \
