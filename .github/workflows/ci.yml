@@ -31,9 +31,11 @@ jobs:
           tools: composer
       - name: Validate Composer metadata
         run: composer validate --strict
-      - name: Install locked dependencies (Symfony 7, latest Mago)
+      - name: Install Symfony 7 with latest compatible Mago
         if: matrix.symfony == '7.0' && matrix.mago == 'latest'
-        run: composer install --no-interaction --prefer-dist --no-progress
+        run: |
+          composer install --no-interaction --prefer-dist --no-progress
+          composer update --no-interaction --prefer-dist --no-progress carthage-software/mago
       - name: Install Symfony 7 with lowest supported Mago
         if: matrix.symfony == '7.0' && matrix.mago != 'latest'
         run: composer update --no-interaction --prefer-dist --no-progress --with="carthage-software/mago:${{ matrix.mago }}"
@@ -55,9 +57,15 @@ jobs:
             "symfony/security-core:^6.4" \
             "symfony/serializer:^6.4" \
             "symfony/validator:^6.4"
+      - name: Resolve latest compatible Mago on Symfony 6.4
+        if: matrix.symfony == '6.4' && matrix.mago == 'latest'
+        run: composer update --no-interaction --prefer-dist --no-progress carthage-software/mago
       - name: Pin lowest supported Mago on Symfony 6.4
         if: matrix.symfony == '6.4' && matrix.mago != 'latest'
         run: composer update --no-interaction --prefer-dist --no-progress --with="carthage-software/mago:${{ matrix.mago }}"
+      - name: Verify installed Mago version
+        if: matrix.mago != 'latest'
+        run: test "$(php vendor/bin/mago --version)" = "mago ${{ matrix.mago }}"
       - name: Validate conformance catalog
         run: php tests/check-spec.php
       - name: Run runtime and analyzer tests
