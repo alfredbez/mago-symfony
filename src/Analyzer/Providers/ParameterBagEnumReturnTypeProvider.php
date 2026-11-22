@@ -31,6 +31,14 @@ final class ParameterBagEnumReturnTypeProvider implements MethodReturnTypeProvid
 
     public function getReturnType(ReturnTypeProviderContext $context): ?Type
     {
+        $declaring = strtolower($context->invocation->declaringClass ?? '');
+        if (
+            $declaring !== 'symfony\\component\\httpfoundation\\parameterbag'
+            && $declaring !== 'symfony\\component\\httpfoundation\\inputbag'
+        ) {
+            return null;
+        }
+
         $classType = $context->invocation->getArgument(1, 'class')?->type;
         $defaultType = $context->invocation->getArgument(2, 'default')?->type;
         if (!$classType instanceof Type || !$defaultType instanceof Type || $defaultType->atomicTypes === []) {

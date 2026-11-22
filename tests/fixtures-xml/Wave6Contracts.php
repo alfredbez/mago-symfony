@@ -39,6 +39,15 @@ final class Wave6DomainException extends RuntimeException
     }
 }
 
+interface Wave6MarkerOnlyInterface
+{
+}
+
+interface Wave6ThrowableMarkerInterface extends \Throwable
+{
+    public function markerTag(): string;
+}
+
 final class Wave6Contracts
 {
     /** @param non-empty-list<string> $dynamicLocales */
@@ -81,6 +90,9 @@ final class Wave6Contracts
         }
         foreach ($wrapped->getWrappedExceptions(class: Wave6DomainException::class) as $ex) {
             $sum += $ex->domainCode();
+        }
+        foreach ($failed->getWrappedExceptions(Wave6ThrowableMarkerInterface::class) as $ex) {
+            $sum += strlen($ex->markerTag()) + strlen($ex->getMessage());
         }
 
         return $sum;

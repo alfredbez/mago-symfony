@@ -525,11 +525,18 @@ $xmlExpected = [
             'missing-constructor' => 2,
         ],
         'tests/fixtures-xml/Wave6Contracts.php' => [],
-        'tests/fixtures-xml/Wave6ContractsNegative.php' => [
-            'non-existent-method' => 2,
-            'possibly-null-operand' => 6,
-            'possibly-null-property-access' => 2,
-        ],
+        'tests/fixtures-xml/Wave6ContractsNegative.php' => $isSymfony7
+            ? [
+                'invalid-argument' => 1,
+                'non-existent-method' => 3,
+                'possibly-null-operand' => 8,
+                'possibly-null-property-access' => 3,
+            ]
+            : [
+                'non-existent-method' => 3,
+                'possibly-null-operand' => 8,
+                'possibly-null-property-access' => 3,
+            ],
     ],
     true => [
         'tests/fixtures-xml/ContainerXmlUsage.php' => [
@@ -613,24 +620,26 @@ $xmlExpected = [
             : [
                 'ambiguous-object-method-access' => 2,
                 'less-specific-nested-argument-type' => 1,
-                'mixed-assignment' => 2,
-                'mixed-operand' => 4,
+                'mixed-argument' => 1,
+                'mixed-assignment' => 3,
+                'mixed-operand' => 5,
                 'mixed-return-statement' => 1,
-                'non-existent-method' => 2,
+                'non-existent-method' => 3,
                 'possibly-null-operand' => 6,
                 'possibly-null-property-access' => 3,
             ],
         'tests/fixtures-xml/Wave6ContractsNegative.php' => $isSymfony7
             ? [
-                'non-existent-method' => 2,
-                'possibly-null-operand' => 6,
-                'possibly-null-property-access' => 2,
+                'invalid-argument' => 1,
+                'non-existent-method' => 3,
+                'possibly-null-operand' => 8,
+                'possibly-null-property-access' => 3,
             ]
             : [
                 'ambiguous-object-method-access' => 1,
-                'non-existent-method' => 1,
-                'possibly-null-operand' => 6,
-                'possibly-null-property-access' => 2,
+                'non-existent-method' => 2,
+                'possibly-null-operand' => 8,
+                'possibly-null-property-access' => 3,
             ],
         'vendor/symfony/validator/ConstraintValidator.php' => $isSymfony7
             ? [

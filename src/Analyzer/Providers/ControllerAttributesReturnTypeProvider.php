@@ -30,6 +30,14 @@ final class ControllerAttributesReturnTypeProvider implements MethodReturnTypePr
 
     public function getReturnType(ReturnTypeProviderContext $context): ?Type
     {
+        $declaring = strtolower($context->invocation->declaringClass ?? '');
+        if (
+            $declaring !== 'symfony\\component\\httpkernel\\event\\controllerevent'
+            && $declaring !== 'symfony\\component\\httpkernel\\event\\controllerargumentsevent'
+        ) {
+            return null;
+        }
+
         $classArg = $context->invocation->getArgument(0, 'className')?->type;
         if (!$classArg instanceof Type) {
             return null;

@@ -31,15 +31,28 @@ final class WrappedExceptionsReturnTypeProvider implements MethodReturnTypeProvi
         ];
     }
 
+    /** @var array<string, true> */
+    private const ALLOWED_DECLARING = [
+        'symfony\\component\\messenger\\exception\\wrappedexceptionsinterface' => true,
+        'symfony\\component\\messenger\\exception\\wrappedexceptionstrait' => true,
+        'symfony\\component\\messenger\\exception\\handlerfailedexception' => true,
+        'symfony\\component\\messenger\\exception\\delayedmessagehandlingexception' => true,
+    ];
+
     public function getReturnType(ReturnTypeProviderContext $context): ?Type
     {
+        $declaring = strtolower($context->invocation->declaringClass ?? '');
+        if (!isset(self::ALLOWED_DECLARING[$declaring])) {
+            return null;
+        }
+
         $classArg = $context->invocation->getArgument(0, 'class')?->type;
         if (!$classArg instanceof Type) {
             return null;
         }
 
         $targetClass = self::resolveClassName($classArg);
-        if ($targetClass === null || !$context->codebase->classOrInterfaceExists($targetClass)) {
+        if ($targetClass === null || !self::isThrowableSubtype($targetClass, $context)) {
             return null;
         }
 
@@ -47,6 +60,25 @@ final class WrappedExceptionsReturnTypeProvider implements MethodReturnTypeProvi
             Type::fromAtomic(new ScalarType(ScalarTypeKind::ArrayKey)),
             Type::namedObject($targetClass),
         );
+    }
+
+    private static function isThrowableSubtype(string $targetClass, ReturnTypeProviderContext $context): bool
+    {
+        if (strtolower($targetClass) === 'throwable') {
+            return true;
+        }
+
+        if (!$context->codebase->classOrInterfaceExists($targetClass)) {
+            return false;
+        }
+
+        foreach ($context->codebase->getClassAncestors($targetClass) as $ancestor) {
+            if (strtolower($ancestor) === 'throwable') {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static function resolveClassName(Type $type): ?string

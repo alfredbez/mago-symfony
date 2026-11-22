@@ -31,6 +31,10 @@ final class RequestPreferredLanguageReturnTypeProvider implements MethodReturnTy
 
     public function getReturnType(ReturnTypeProviderContext $context): ?Type
     {
+        if (strtolower($context->invocation->declaringClass ?? '') !== 'symfony\\component\\httpfoundation\\request') {
+            return null;
+        }
+
         $localesType = $context->invocation->getArgument(0, 'locales')?->type;
         if (!$localesType instanceof Type || $localesType->atomicTypes === []) {
             return null;

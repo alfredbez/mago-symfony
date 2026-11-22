@@ -743,7 +743,7 @@
       ],
       "fixture": "<?php function errs(\\Symfony\\Component\\Messenger\\Exception\\HandlerFailedException $e): void { foreach ($e->getWrappedExceptions(\\SymfonyFixtureXml\\Wave6DomainException::class) as $x) { $x->domainCode(); } }",
       "semantics": "WrappedExceptionsTrait::getWrappedExceptions($class) filters wrapped exceptions with is_a() when $class is non-empty and preserves array-key handler names via array_merge(). Symfony 6.4 declares Throwable[] without a @template parameter.",
-      "analyzer_expectation": "Target WrappedExceptionsInterface, WrappedExceptionsTrait, HandlerFailedException, and DelayedMessageHandlingException and return array<array-key, T> when $class resolves to an existing class or interface; leave omitted, null, or empty-string arguments unchanged.",
+      "analyzer_expectation": "Target WrappedExceptionsInterface, WrappedExceptionsTrait, HandlerFailedException, and DelayedMessageHandlingException and return array<array-key, T> only when declaringClass is Symfony's own contract and $class resolves to a Throwable subtype; leave custom overrides, non-Throwable marker interfaces, omitted, null, or empty-string arguments unchanged.",
       "negative_control": "Calling an unknown method on a filtered exception reports non-existent-method on Wave6DomainException; disabling extensions on Symfony 6.4 restores non-existent-method on Throwable.",
       "priority": "P1",
       "versions": "Verified on Mago 1.60.2 / PHP 8.3 against Symfony Messenger 6.4 and 7.4.",
