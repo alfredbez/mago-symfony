@@ -6,7 +6,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
-`0.1.0` release candidate targeting Mago `^1.60.2` (verified on `1.60.2` and `1.61.0`) and Symfony `^6.4 || ^7.0`.
+## [0.1.0] - 2026-11-22
+
+Version `0.1.0` targets Mago `^1.60.2` (verified on `1.60.2` and `1.61.0`) and Symfony `^6.4 || ^7.0`.
 
 ### Added
 
@@ -25,3 +27,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - Configurable Security `getUser()` narrowing via `MAGO_SYMFONY_USER_CLASS`.
 - Lifecycle class initializers for `AbstractController::setContainer()`, `ConstraintValidator::initialize()`, `InputAwareHelper::setInput()`, and methods carrying `#[Symfony\Contracts\Service\Attribute\Required]`.
 - Pinned conformance catalog (`spec/catalog.json` with 27 cases), Symfony 6.4 and 7.4 runtime tests, pinned OSS corpus regression harness, and CodSpeed benchmarks.
+
+### Changed
+
+- Documentation rewritten for first-time setup: badges, copy-paste worker configuration, container data table, check and feature tables, and suppression examples.
