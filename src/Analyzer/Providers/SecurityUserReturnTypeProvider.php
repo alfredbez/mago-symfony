@@ -53,19 +53,26 @@ final class SecurityUserReturnTypeProvider implements MethodReturnTypeProvider
             return $this->nullableUserType;
         }
 
-        $this->validated = true;
         if (!$context->codebase->classOrInterfaceExists($this->userClass)) {
+            $this->validated = true;
+
             return null;
         }
 
         if (!$this->implementsUserInterface($context)) {
+            $this->validated = true;
+
             return null;
         }
 
-        return $this->nullableUserType = Type::union(
+        $resolved = Type::union(
             Type::namedObject($this->userClass),
             Type::null(),
         );
+        $this->nullableUserType = $resolved;
+        $this->validated = true;
+
+        return $resolved;
     }
 
     private function implementsUserInterface(ReturnTypeProviderContext $context): bool
