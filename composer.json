@@ -3,7 +3,18 @@
     "description": "Symfony support for the Mago static analyzer.",
     "type": "library",
     "license": "MIT",
-    "keywords": ["mago", "symfony", "static-analysis", "extension"],
+    "homepage": "https://github.com/alfredbez/mago-symfony",
+    "keywords": ["mago", "symfony", "static-analysis", "extension", "php"],
+    "authors": [
+        {
+            "name": "Alfred Bez",
+            "homepage": "https://github.com/alfredbez"
+        }
+    ],
+    "support": {
+        "issues": "https://github.com/alfredbez/mago-symfony/issues",
+        "source": "https://github.com/alfredbez/mago-symfony"
+    },
     "require": {
         "php": "~8.1.0 || ~8.2.0 || ~8.3.0 || ~8.4.0 || ~8.5.0 || ~8.6.0",
         "carthage-software/mago": "~1.60.2"
@@ -28,6 +39,9 @@
             "AlfredBez\\MagoSymfony\\": "src/"
         }
     },
+    "bin": [
+        "bin/mago-symfony-worker"
+    ],
     "scripts": {
         "test": "php tests/run.php"
     },

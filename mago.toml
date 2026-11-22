@@ -32,5 +32,5 @@ find-unused-expressions = false
 check-property-initialization = false
 
 [extension-hosts.symfony]
-command = ["php", "tests/worker.php"]
+command = ["php", "bin/mago-symfony-worker"]
 workers = 1
