@@ -48,8 +48,8 @@ final class Wave6InputAwareHelper extends InputAwareHelper
         return 'wave6_input_helper';
     }
 
-    public function isInteractiveInput(): bool
+    public function rawInput(): mixed
     {
-        return $this->input->isInteractive();
+        return $this->input;
     }
 }

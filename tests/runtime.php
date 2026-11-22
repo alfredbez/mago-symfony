@@ -254,7 +254,7 @@ $inputHelper = new \SymfonyFixtureXml\Wave6InputAwareHelper();
 $arrayInput = new \Symfony\Component\Console\Input\ArrayInput([]);
 $arrayInput->setInteractive(false);
 $inputHelper->setInput($arrayInput);
-check($inputHelper->isInteractiveInput() === false, 'InputAwareHelper::setInput wires InputInterface before use');
+check($inputHelper->rawInput() === $arrayInput, 'InputAwareHelper::setInput wires InputInterface before use');
 
 require_once __DIR__ . '/fixtures-xml/Wave6Contracts.php';
 $langReq = new \Symfony\Component\HttpFoundation\Request();
