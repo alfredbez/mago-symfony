@@ -16,6 +16,10 @@ use Mago\Sdk\Analyzer\PluginRegistry;
  */
 final class TreeBuilderRootTypePlugin implements Plugin
 {
+    public function __construct(
+        private readonly TreeBuilderRootNodeIndex $index,
+    ) {}
+
     public function getDefinition(): PluginDefinition
     {
         return new PluginDefinition(
@@ -28,8 +32,7 @@ final class TreeBuilderRootTypePlugin implements Plugin
 
     public function register(PluginRegistry $registry): void
     {
-        $index = new TreeBuilderRootNodeIndex();
-        $registry->registerCodebaseScanHook($index);
-        $registry->registerMethodReturnTypeProvider(new RootNodeReturnTypeProvider($index));
+        $registry->registerBeforeAnalysisHook($this->index);
+        $registry->registerMethodReturnTypeProvider(new RootNodeReturnTypeProvider($this->index));
     }
 }

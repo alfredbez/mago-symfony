@@ -23,6 +23,7 @@ use AlfredBez\MagoSymfony\Analyzer\Providers\SerializerReturnTypeProvider;
 use AlfredBez\MagoSymfony\Analyzer\Providers\ServiceClassMap;
 use AlfredBez\MagoSymfony\Analyzer\Providers\TreeBuilderReturnIssueFilter;
 use AlfredBez\MagoSymfony\Analyzer\Providers\TreeBuilderRootNodeHook;
+use AlfredBez\MagoSymfony\Analyzer\Providers\TreeBuilderRootNodeIndex;
 use AlfredBez\MagoSymfony\Analyzer\Providers\WrappedExceptionsReturnTypeProvider;
 use Mago\Sdk\Analyzer\Plugin;
 use Mago\Sdk\Analyzer\PluginDefinition;
@@ -30,6 +31,9 @@ use Mago\Sdk\Analyzer\PluginRegistry;
 
 final class SymfonyPlugin implements Plugin
 {
+    public function __construct(
+        private readonly ?TreeBuilderRootNodeIndex $rootNodeIndex = null,
+    ) {}
     public function getDefinition(): PluginDefinition
     {
         return new PluginDefinition(
@@ -64,7 +68,7 @@ final class SymfonyPlugin implements Plugin
             $registry->registerMethodReturnTypeProvider(new SecurityUserReturnTypeProvider($userClass));
         }
         $registry->registerClassInitializerProvider(new RequiredInitializerProvider());
-        $registry->registerMethodCallAnalysisHook(new TreeBuilderRootNodeHook());
+        $registry->registerMethodCallAnalysisHook(new TreeBuilderRootNodeHook($this->rootNodeIndex));
         if ($container->isXmlLoaded()) {
             $registry->registerMethodCallAnalysisHook(
                 new ContainerGetAccessHook(

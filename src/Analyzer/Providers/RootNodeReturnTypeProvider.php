@@ -60,27 +60,34 @@ final class RootNodeReturnTypeProvider implements MethodReturnTypeProvider
             && isset($receiverAtomic->parameters[0])
             && strtolower($receiverAtomic->name) === self::LOWER_TREE_BUILDER;
 
-        $rootType = null;
+        $provenRootType = null;
         $receiverTemplateLiteral = null;
         if ($hasReceiverTemplate) {
             $receiverTemplateLiteral = $receiverAtomic->parameters[0]->getLiteralString();
             if ($receiverTemplateLiteral !== null) {
                 $lower = strtolower($receiverTemplateLiteral);
                 if (isset(self::NODE_TYPE_MAP[$lower])) {
-                    $rootType = $lower;
+                    $provenRootType = $lower;
                 }
             }
         }
 
-        $rootType ??= $this->index?->rootTypeForSpan($context->invocation->span) ?? 'array';
+        if ($provenRootType === null && $this->index !== null) {
+            $indexed = $this->index->rootTypeForSpan($context->invocation->span);
+            if ($indexed === TreeBuilderRootNodeIndex::AMBIGUOUS) {
+                return null;
+            }
+            $provenRootType = $indexed;
+        }
 
-        $nodeClass = self::NODE_TYPE_MAP[$rootType] ?? self::ARRAY_NODE_DEFINITION;
+        $effectiveRootType = $provenRootType ?? 'array';
+        $nodeClass = self::NODE_TYPE_MAP[$effectiveRootType] ?? self::ARRAY_NODE_DEFINITION;
         if (!$context->codebase->classExists($nodeClass)) {
             return null;
         }
 
-        if ($hasReceiverTemplate && $receiverTemplateLiteral === null) {
-            $parent = Type::namedObject($receiverAtomic->name, Type::literalString($rootType));
+        if ($hasReceiverTemplate && $receiverTemplateLiteral === null && $provenRootType !== null) {
+            $parent = Type::namedObject($receiverAtomic->name, Type::literalString($provenRootType));
         } else {
             $parent = $receiver
                 ?? ($this->defaultTreeBuilderType ??= Type::namedObject(self::TREE_BUILDER));

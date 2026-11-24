@@ -30,4 +30,14 @@ final class TreeBuilderScopes
         $configure(new ArrayNodeDefinition('inner'));
         $root->isRequired();
     }
+
+    /** @param list<TreeBuilder> $trees */
+    public function foreachReboundTree(array $trees): void
+    {
+        $tree = new TreeBuilder('old', 'scalar');
+        $tree->getRootNode()->isRequired();
+        foreach ($trees as $tree) {
+            $tree->getRootNode()->children();
+        }
+    }
 }

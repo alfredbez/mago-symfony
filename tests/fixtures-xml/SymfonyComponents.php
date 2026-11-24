@@ -106,6 +106,28 @@ final class InheritedCommand extends ValidatedCommand
     }
 }
 
+final class ConstructorConfiguredCommand extends Command
+{
+    public function __construct()
+    {
+        parent::__construct('demo');
+        $this->addArgument('id', InputArgument::REQUIRED);
+    }
+
+    protected function configure(): void
+    {
+        $this->addOption('dry-run', null, InputOption::VALUE_NONE);
+    }
+
+    protected function execute(InputInterface $input, OutputInterface $output): int
+    {
+        return $input->getArgument('id') !== null
+            && $input->getOption('dry-run') !== null
+            ? Command::SUCCESS
+            : Command::FAILURE;
+    }
+}
+
 final class SymfonyComponentsController extends AbstractController
 {
     public function exercise(

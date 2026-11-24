@@ -4,31 +4,70 @@ declare(strict_types=1);
 
 namespace AlfredBez\MagoSymfony\Analyzer\Providers;
 
-use Mago\Sdk\Analyzer\CodebaseScanContext;
-use Mago\Sdk\Analyzer\CodebaseScanHook;
+use Mago\Sdk\Analyzer\BeforeAnalysisContext;
+use Mago\Sdk\Analyzer\BeforeAnalysisHook;
 use Mago\Sdk\Span;
-use Mago\Sdk\Syntax\Node;
-use Mago\Sdk\Syntax\NodeKind;
-use Mago\Sdk\Syntax\SourceFile;
 
 use function array_key_exists;
-use function array_key_last;
+use function array_keys;
+use function array_pop;
 use function count;
+use function file_get_contents;
+use function get_declared_classes;
+use function is_array;
+use function is_file;
 use function ltrim;
+use function str_contains;
+use function str_starts_with;
 use function stripos;
 use function strlen;
-use function strpos;
 use function strtolower;
 use function substr;
+use function token_get_all;
+
+use const T_AS;
+use const T_CATCH;
+use const T_CLASS;
+use const T_COMMENT;
+use const T_CONSTANT_ENCAPSED_STRING;
+use const T_DO;
+use const T_DOC_COMMENT;
+use const T_ELSE;
+use const T_ELSEIF;
+use const T_FN;
+use const T_FOR;
+use const T_FOREACH;
+use const T_FUNCTION;
+use const T_IF;
+use const T_LIST;
+use const T_MATCH;
+use const T_NAME_FULLY_QUALIFIED;
+use const T_NAME_QUALIFIED;
+use const T_NEW;
+use const T_OBJECT_OPERATOR;
+use const T_STRING;
+use const T_SWITCH;
+use const T_TRY;
+use const T_UNSET;
+use const T_USE;
+use const T_VARIABLE;
+use const T_WHILE;
+use const T_WHITESPACE;
 
 /**
- * Indexes `TreeBuilder::getRootNode()` calls by exact byte span when the enclosing scope
- * constructs `TreeBuilder` with a literal root node type (such as `'scalar'` or `'enum'`).
+ * Indexes `TreeBuilder::getRootNode()` calls by exact byte span using PHP's tokenizer
+ * during `BeforeAnalysisHook`, avoiding eager CST transport across the codebase.
  *
- * Cross-file span collisions with differing root types degrade conservatively to unresolved.
+ * Returns one of:
+ * - concrete normalized root type (`'scalar'`, `'enum'`, `'integer'`, ..., `'array'`)
+ * - `self::AMBIGUOUS` when a span collides across files with differing root types or
+ *   when the TreeBuilder root type is dynamic, conditionally reassigned, or rebound
+ * - `null` when the span is unseen (e.g. parameter-passed TreeBuilder or unit tests)
  */
-final class TreeBuilderRootNodeIndex implements CodebaseScanHook
+final class TreeBuilderRootNodeIndex implements BeforeAnalysisHook
 {
+    public const AMBIGUOUS = '__ambiguous__';
+
     private const LOWER_TREE_BUILDER = 'symfony\\component\\config\\definition\\builder\\treebuilder';
 
     private const NON_ARRAY_TYPES = [
@@ -41,80 +80,51 @@ final class TreeBuilderRootNodeIndex implements CodebaseScanHook
         'enum' => true,
     ];
 
-    /** @var array<string, string> spanKey => normalized root type ('scalar', 'enum', 'array', ...) */
+    /** @var array<string, string> spanKey => normalized root type or self::AMBIGUOUS */
     private array $rootTypeBySpan = [];
-
-    /** @var array<string, true> */
-    private array $ambiguousSpans = [];
-
-    /** @var list<SourceFile> */
-    private array $deferredCollisionFiles = [];
 
     private bool $hasNonArrayRoot = false;
 
-    public function getTargets(): array
+    public function beforeAnalysis(BeforeAnalysisContext $context): void
     {
-        return ['**/*.php'];
-    }
+        $this->rootTypeBySpan = [];
+        $this->hasNonArrayRoot = false;
 
-    public function scan(CodebaseScanContext $context): void
-    {
-        if ($context->firstBatch) {
-            $this->rootTypeBySpan = [];
-            $this->ambiguousSpans = [];
-            $this->deferredCollisionFiles = [];
-            $this->hasNonArrayRoot = false;
+        $files = $this->collectCandidateFiles($context);
+        if ($files === []) {
+            return;
         }
 
-        foreach ($context->files as $source) {
-            if (stripos($source->contents, 'getRootNode') === false) {
+        $deferredArrayFiles = [];
+        foreach ($files as $file) {
+            if (!is_file($file)) {
+                continue;
+            }
+            $contents = @file_get_contents($file);
+            if ($contents === false || stripos($contents, 'getRootNode') === false) {
                 continue;
             }
 
-            if (stripos($source->contents, 'TreeBuilder') === false || !self::mightHaveNonArrayRoot($source->contents)) {
-                $this->deferredCollisionFiles[] = $source;
+            if (stripos($contents, 'TreeBuilder') === false || !self::mightHaveNonArrayRoot($contents)) {
+                $deferredArrayFiles[] = $contents;
                 continue;
             }
 
-            $fileFoundNonArray = false;
-            $fileCalls = [];
-            foreach ($source->getNodes(NodeKind::MethodCall) as $call) {
-                $method = self::calledMethodName($source, $call);
-                if ($method === null || strtolower($method) !== 'getrootnode') {
-                    continue;
+            $entries = self::scanSource($contents, resolveNonArray: true);
+            foreach ($entries as [$key, $type]) {
+                if ($type !== 'array' && $type !== self::AMBIGUOUS) {
+                    $this->hasNonArrayRoot = true;
                 }
-
-                $rootType = self::resolveRootNodeType($source, $call) ?? 'array';
-                if ($rootType !== 'array' && isset(self::NON_ARRAY_TYPES[$rootType])) {
-                    $fileFoundNonArray = true;
-                } else {
-                    $rootType = 'array';
-                }
-                $fileCalls[] = [$call->span->start . ':' . $call->span->end, $rootType];
-            }
-
-            if ($fileFoundNonArray) {
-                $this->hasNonArrayRoot = true;
-            }
-
-            foreach ($fileCalls as [$key, $rootType]) {
-                $this->recordSpanType($key, $rootType);
+                $this->recordSpanType($key, $type);
             }
         }
 
-        if ($context->lastBatch) {
-            if ($this->hasNonArrayRoot && $this->deferredCollisionFiles !== []) {
-                foreach ($this->deferredCollisionFiles as $source) {
-                    foreach ($source->getNodes(NodeKind::MethodCall) as $call) {
-                        $method = self::calledMethodName($source, $call);
-                        if ($method === null || strtolower($method) !== 'getrootnode') {
-                            continue;
-                        }
-                        $this->recordSpanType($call->span->start . ':' . $call->span->end, 'array');
-                    }
+        if ($this->hasNonArrayRoot && $deferredArrayFiles !== []) {
+            foreach ($deferredArrayFiles as $contents) {
+                foreach (self::scanSource($contents, resolveNonArray: false) as [$key, $type]) {
+                    $this->recordSpanType($key, $type);
                 }
             }
-            $this->deferredCollisionFiles = [];
         }
     }
 
@@ -125,23 +135,110 @@ final class TreeBuilderRootNodeIndex implements CodebaseScanHook
         }
 
         $key = $span->start . ':' . $span->end;
-        if (isset($this->ambiguousSpans[$key])) {
-            return null;
-        }
 
         return $this->rootTypeBySpan[$key] ?? null;
     }
 
-    private function recordSpanType(string $key, string $rootType): void
+    private const STUB_NAMESPACE_PREFIXES = [
+        'aerospike\\',
+        'amqp\\',
+        'bcmath\\',
+        'brotli\\',
+        'componere\\',
+        'crypto\\',
+        'dom\\',
+        'ds\\',
+        'ffi\\',
+        'grpc\\',
+        'mago\\',
+        'mongodb\\',
+        'openswoole\\',
+        'opentelemetry\\',
+        'parallel\\',
+        'pdo\\',
+        'random\\',
+        'rdkafka\\',
+        'sodium\\',
+        'swoole\\',
+        'uri\\',
+        'vtiful\\',
+    ];
+
+    /**
+     * @return list<string>
+     */
+    private function collectCandidateFiles(BeforeAnalysisContext $context): array
     {
-        if (isset($this->ambiguousSpans[$key])) {
-            return;
+        $internalClasses = [];
+        foreach (get_declared_classes() as $declared) {
+            $internalClasses[strtolower($declared)] = true;
         }
 
+        $classQuery = [];
+        foreach ($context->codebase->getClassNames() as $name) {
+            if (!str_contains($name, '\\')) {
+                continue;
+            }
+            $lower = strtolower($name);
+            if (isset($internalClasses[$lower]) || self::isStubNamespace($lower)) {
+                continue;
+            }
+            $classQuery[] = $name;
+        }
+
+        $files = [];
+        if ($classQuery !== []) {
+            foreach ($context->codebase->getMultipleClasses($classQuery) as $meta) {
+                if ($meta !== null) {
+                    $file = $meta->location->file;
+                    if ($file !== '' && !str_contains($file, '/vendor/') && !str_starts_with($file, 'vendor/')) {
+                        $files[$file] = true;
+                    }
+                }
+            }
+        }
+
+        $fnQuery = [];
+        foreach ($context->codebase->getFunctionNames() as $fnName) {
+            if (!str_contains($fnName, '\\')) {
+                continue;
+            }
+            if (self::isStubNamespace(strtolower($fnName))) {
+                continue;
+            }
+            $fnQuery[] = $fnName;
+        }
+
+        if ($fnQuery !== []) {
+            foreach ($context->codebase->getMultipleFunctions($fnQuery) as $fnMeta) {
+                if ($fnMeta !== null) {
+                    $file = $fnMeta->location->file;
+                    if ($file !== '' && !str_contains($file, '/vendor/') && !str_starts_with($file, 'vendor/')) {
+                        $files[$file] = true;
+                    }
+                }
+            }
+        }
+
+        return array_keys($files);
+    }
+
+    private static function isStubNamespace(string $lowerName): bool
+    {
+        foreach (self::STUB_NAMESPACE_PREFIXES as $prefix) {
+            if (str_starts_with($lowerName, $prefix)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function recordSpanType(string $key, string $rootType): void
+    {
         if (array_key_exists($key, $this->rootTypeBySpan)) {
             if ($this->rootTypeBySpan[$key] !== $rootType) {
-                $this->ambiguousSpans[$key] = true;
-                unset($this->rootTypeBySpan[$key]);
+                $this->rootTypeBySpan[$key] = self::AMBIGUOUS;
             }
 
             return;
@@ -161,280 +258,579 @@ final class TreeBuilderRootNodeIndex implements CodebaseScanHook
         return false;
     }
 
-    private static function resolveRootNodeType(SourceFile $source, Node $call): ?string
+    /**
+     * Scans one PHP file with `token_get_all()` and returns `[spanKey, rootType]` pairs
+     * for every `getRootNode()` call.
+     *
+     * @return list<array{string, string}>
+     */
+    private static function scanSource(string $contents, bool $resolveNonArray): array
     {
-        $receiver = self::unwrap($source, $source->getChildren($call)[0] ?? null);
-        if ($receiver === null) {
-            return null;
+        $rawTokens = token_get_all($contents);
+        /** @var list<array{id: int|string, text: string, start: int, end: int}> $tokens */
+        $tokens = [];
+        $offset = 0;
+        foreach ($rawTokens as $tok) {
+            if (is_array($tok)) {
+                $len = strlen($tok[1]);
+                if ($tok[0] !== T_WHITESPACE && $tok[0] !== T_COMMENT && $tok[0] !== T_DOC_COMMENT) {
+                    $tokens[] = ['id' => $tok[0], 'text' => $tok[1], 'start' => $offset, 'end' => $offset + $len];
+                }
+                $offset += $len;
+            } else {
+                $len = strlen($tok);
+                $tokens[] = ['id' => $tok, 'text' => $tok, 'start' => $offset, 'end' => $offset + $len];
+                $offset += $len;
+            }
         }
 
-        if (self::isTreeBuilderInstantiation($source, $receiver)) {
-            return self::extractTreeBuilderType($source, $receiver);
-        }
+        $total = count($tokens);
+        $treeBuilderAliases = self::collectTreeBuilderAliases($tokens);
+        $results = [];
 
-        $varName = self::directVariableName($source, $receiver);
-        if ($varName === null) {
-            return null;
-        }
+        /** @var list<array{braceDepth: int, vars: array<string, string>, branchDepth: int}> $scopes */
+        $scopes = [['braceDepth' => 0, 'vars' => [], 'branchDepth' => 0]];
+        $braceDepth = 0;
+        /** @var list<int> $branchBraceDepths */
+        $branchBraceDepths = [];
+        $pendingFunctionScope = false;
+        $pendingBranch = false;
 
-        $scope = self::enclosingScope($source, $call);
-        $contents = $source->contents;
-        $varLen = strlen($varName);
-        $callStart = $call->span->start;
-        $firstHit = strpos($contents, $varName, $scope->span->start);
-        if ($firstHit === false || $firstHit + $varLen > $callStart) {
-            return null;
-        }
+        for ($i = 0; $i < $total; ++$i) {
+            $t = $tokens[$i];
+            $id = $t['id'];
 
-        $unconditionalType = null;
-        $hasUnconditional = false;
-        $branchTypes = [];
-
-        /** @var list<array{Node, bool}> $stack */
-        $stack = [];
-        $scopeChildren = $source->getChildren($scope);
-        for ($i = count($scopeChildren) - 1; $i >= 0; --$i) {
-            $stack[] = [$scopeChildren[$i], false];
-        }
-
-        while (($entry = array_pop($stack)) !== null) {
-            [$node, $inBranch] = $entry;
-            $span = $node->span;
-            if ($span->start >= $callStart || self::isScopeBoundary($node->kind)) {
+            if ($id === T_FUNCTION) {
+                $pendingFunctionScope = true;
                 continue;
             }
 
-            $hit = strpos($contents, $varName, $span->start);
-            if ($hit === false || $hit + $varLen > $span->end) {
+            if ($id === T_FN) {
+                // Arrow function: skip its expression body conservatively to avoid leaking bindings.
+                $arrow = self::findNextToken($tokens, $i + 1, '=>');
+                if ($arrow !== null) {
+                    $i = self::skipArrowExpression($tokens, $arrow + 1);
+                }
                 continue;
             }
 
-            $nextInBranch = $inBranch || self::isConditionalOrLoop($node->kind);
-            $children = $source->getChildren($node);
+            if (
+                $id === T_IF
+                || $id === T_ELSEIF
+                || $id === T_ELSE
+                || $id === T_SWITCH
+                || $id === T_MATCH
+                || $id === T_TRY
+                || $id === T_WHILE
+                || $id === T_DO
+                || $id === T_FOR
+            ) {
+                $pendingBranch = true;
+                continue;
+            }
 
-            if ($node->kind === NodeKind::Assignment) {
-                $lhs = $children[0] ?? null;
-                if ($lhs !== null && self::directVariableName($source, $lhs) === $varName) {
-                    $rhs = $children !== [] ? $children[array_key_last($children)] : null;
-                    $rhsUnwrapped = self::unwrap($source, $rhs);
-                    $assignedType = ($rhsUnwrapped !== null && self::isTreeBuilderInstantiation($source, $rhsUnwrapped))
-                        ? (self::extractTreeBuilderType($source, $rhsUnwrapped) ?? 'array')
-                        : null;
-
-                    if (!$nextInBranch) {
-                        $unconditionalType = $assignedType;
-                        $hasUnconditional = true;
-                        $branchTypes = [];
-                    } else {
-                        $branchTypes[] = $assignedType;
+            if ($id === T_FOREACH) {
+                $pendingBranch = true;
+                if ($resolveNonArray) {
+                    $openParen = self::findNextToken($tokens, $i + 1, '(');
+                    if ($openParen !== null) {
+                        $closeParen = self::findMatchingDelimiter($tokens, $openParen, '(', ')');
+                        if ($closeParen !== null) {
+                            $asIdx = self::findTokenInRange($tokens, $openParen + 1, $closeParen, T_AS);
+                            if ($asIdx !== null) {
+                                for ($k = $asIdx + 1; $k < $closeParen; ++$k) {
+                                    if ($tokens[$k]['id'] === T_VARIABLE) {
+                                        self::killScopeVar($scopes, $tokens[$k]['text']);
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
-            }
-
-            for ($i = count($children) - 1; $i >= 0; --$i) {
-                $stack[] = [$children[$i], $nextInBranch];
-            }
-        }
-
-        if (!$hasUnconditional) {
-            return null;
-        }
-
-        foreach ($branchTypes as $branchType) {
-            if ($branchType !== $unconditionalType) {
-                return null;
-            }
-        }
-
-        return $unconditionalType;
-    }
-
-    private static function enclosingScope(SourceFile $source, Node $node): Node
-    {
-        $current = $source->getParent($node);
-        while ($current !== null) {
-            if (self::isScopeBoundary($current->kind)) {
-                return $current;
-            }
-
-            $parent = $source->getParent($current);
-            if ($parent === null) {
-                return $current;
-            }
-
-            $current = $parent;
-        }
-
-        return $node;
-    }
-
-    private static function isScopeBoundary(NodeKind $kind): bool
-    {
-        return $kind === NodeKind::Method
-            || $kind === NodeKind::Function
-            || $kind === NodeKind::Closure
-            || $kind === NodeKind::ArrowFunction;
-    }
-
-    private static function isConditionalOrLoop(NodeKind $kind): bool
-    {
-        return $kind === NodeKind::If
-            || $kind === NodeKind::IfStatementBodyElseIfClause
-            || $kind === NodeKind::IfStatementBodyElseClause
-            || $kind === NodeKind::IfColonDelimitedBodyElseIfClause
-            || $kind === NodeKind::IfColonDelimitedBodyElseClause
-            || $kind === NodeKind::Switch
-            || $kind === NodeKind::Match
-            || $kind === NodeKind::Try
-            || $kind === NodeKind::TryCatchClause
-            || $kind === NodeKind::While
-            || $kind === NodeKind::DoWhile
-            || $kind === NodeKind::For
-            || $kind === NodeKind::Foreach
-            || $kind === NodeKind::Conditional;
-    }
-
-    private static function isTreeBuilderInstantiation(SourceFile $source, Node $node): bool
-    {
-        if ($node->kind !== NodeKind::Instantiation) {
-            return false;
-        }
-
-        foreach ($source->getChildren($node) as $child) {
-            $unwrapped = self::unwrap($source, $child);
-            if (
-                $unwrapped === null
-                || $unwrapped->kind === NodeKind::Keyword
-                || $unwrapped->kind === NodeKind::ArgumentList
-            ) {
                 continue;
             }
 
-            if (
-                $unwrapped->kind === NodeKind::Identifier
-                || $unwrapped->kind === NodeKind::LocalIdentifier
-                || $unwrapped->kind === NodeKind::QualifiedIdentifier
-                || $unwrapped->kind === NodeKind::FullyQualifiedIdentifier
-            ) {
-                $resolved = $source->getResolvedName($unwrapped)?->name;
-                $name = $resolved !== null ? ltrim($resolved, '\\') : ltrim($source->getText($unwrapped), '\\');
+            if ($id === T_CATCH) {
+                $pendingBranch = true;
+                if ($resolveNonArray) {
+                    $openParen = self::findNextToken($tokens, $i + 1, '(');
+                    if ($openParen !== null) {
+                        $closeParen = self::findMatchingDelimiter($tokens, $openParen, '(', ')');
+                        if ($closeParen !== null) {
+                            for ($k = $openParen + 1; $k < $closeParen; ++$k) {
+                                if ($tokens[$k]['id'] === T_VARIABLE) {
+                                    self::killScopeVar($scopes, $tokens[$k]['text']);
+                                }
+                            }
+                        }
+                    }
+                }
+                continue;
+            }
 
-                return strtolower($name) === self::LOWER_TREE_BUILDER;
+            if ($id === T_UNSET && $resolveNonArray) {
+                $openParen = self::findNextToken($tokens, $i + 1, '(');
+                if ($openParen !== null) {
+                    $closeParen = self::findMatchingDelimiter($tokens, $openParen, '(', ')');
+                    if ($closeParen !== null) {
+                        for ($k = $openParen + 1; $k < $closeParen; ++$k) {
+                            if ($tokens[$k]['id'] === T_VARIABLE) {
+                                self::killScopeVar($scopes, $tokens[$k]['text']);
+                            }
+                        }
+                    }
+                }
+                continue;
+            }
+
+            if ($id === T_LIST && $resolveNonArray) {
+                $openParen = self::findNextToken($tokens, $i + 1, '(');
+                if ($openParen !== null) {
+                    $closeParen = self::findMatchingDelimiter($tokens, $openParen, '(', ')');
+                    if ($closeParen !== null) {
+                        for ($k = $openParen + 1; $k < $closeParen; ++$k) {
+                            if ($tokens[$k]['id'] === T_VARIABLE) {
+                                self::killScopeVar($scopes, $tokens[$k]['text']);
+                            }
+                        }
+                    }
+                }
+                continue;
+            }
+
+            if ($id === '[' && $resolveNonArray) {
+                $closeBracket = self::findMatchingDelimiter($tokens, $i, '[', ']');
+                if ($closeBracket !== null && isset($tokens[$closeBracket + 1]) && $tokens[$closeBracket + 1]['id'] === '=') {
+                    for ($k = $i + 1; $k < $closeBracket; ++$k) {
+                        if ($tokens[$k]['id'] === T_VARIABLE) {
+                            self::killScopeVar($scopes, $tokens[$k]['text']);
+                        }
+                    }
+                }
+                continue;
+            }
+
+            if ($id === '{') {
+                ++$braceDepth;
+                if ($pendingFunctionScope) {
+                    $scopes[] = ['braceDepth' => $braceDepth, 'vars' => [], 'branchDepth' => count($branchBraceDepths)];
+                    $pendingFunctionScope = false;
+                    $pendingBranch = false;
+                } elseif ($pendingBranch) {
+                    $branchBraceDepths[] = $braceDepth;
+                    $pendingBranch = false;
+                }
+                continue;
+            }
+
+            if ($id === '}') {
+                $topScope = $scopes[count($scopes) - 1];
+                if (count($scopes) > 1 && $topScope['braceDepth'] === $braceDepth) {
+                    array_pop($scopes);
+                }
+                if ($branchBraceDepths !== [] && $branchBraceDepths[count($branchBraceDepths) - 1] === $braceDepth) {
+                    array_pop($branchBraceDepths);
+                }
+                if ($braceDepth > 0) {
+                    --$braceDepth;
+                }
+                continue;
+            }
+
+            if ($id === ';') {
+                $pendingFunctionScope = false;
+                $pendingBranch = false;
+                continue;
+            }
+
+            // Variable assignment: `$var = ...`
+            if ($resolveNonArray && $id === T_VARIABLE && isset($tokens[$i + 1]) && $tokens[$i + 1]['id'] === '=') {
+                $varName = $t['text'];
+                $rhsStart = $i + 2;
+                $inBranch = count($branchBraceDepths) > $scopes[count($scopes) - 1]['branchDepth'];
+                $assignedType = self::parseRhsTreeBuilderType($tokens, $rhsStart, $treeBuilderAliases);
+                self::assignScopeVar($scopes, $varName, $assignedType, $inBranch);
+                continue;
+            }
+
+            // Method call: `->getRootNode()`
+            if (
+                $id === T_OBJECT_OPERATOR
+                && isset($tokens[$i + 1], $tokens[$i + 2])
+                && $tokens[$i + 1]['id'] === T_STRING
+                && strtolower($tokens[$i + 1]['text']) === 'getrootnode'
+                && $tokens[$i + 2]['id'] === '('
+            ) {
+                $closeCall = self::findMatchingDelimiter($tokens, $i + 2, '(', ')');
+                if ($closeCall === null) {
+                    continue;
+                }
+
+                $receiverStartIdx = self::findReceiverStartIndex($tokens, $i - 1);
+                if ($receiverStartIdx === null) {
+                    continue;
+                }
+
+                $spanKey = $tokens[$receiverStartIdx]['start'] . ':' . $tokens[$closeCall]['end'];
+                if (!$resolveNonArray) {
+                    $results[] = [$spanKey, 'array'];
+                    continue;
+                }
+
+                $rootType = self::resolveReceiverRootType($tokens, $receiverStartIdx, $i - 1, $treeBuilderAliases, $scopes);
+                if ($rootType !== null) {
+                    $results[] = [$spanKey, $rootType];
+                }
             }
         }
 
-        return false;
+        return $results;
     }
 
-    private static function extractTreeBuilderType(SourceFile $source, Node $instantiation): ?string
+    /**
+     * @param list<array{braceDepth: int, vars: array<string, string>, branchDepth: int}> $scopes
+     */
+    private static function killScopeVar(array &$scopes, string $varName): void
     {
-        $argumentList = null;
-        foreach ($source->getChildren($instantiation) as $child) {
-            if ($child->kind === NodeKind::ArgumentList) {
-                $argumentList = $child;
+        $top = count($scopes) - 1;
+        unset($scopes[$top]['vars'][$varName]);
+    }
+
+    /**
+     * @param list<array{braceDepth: int, vars: array<string, string>, branchDepth: int}> $scopes
+     */
+    private static function assignScopeVar(array &$scopes, string $varName, ?string $newType, bool $inBranch): void
+    {
+        $top = count($scopes) - 1;
+        if ($newType === null) {
+            unset($scopes[$top]['vars'][$varName]);
+
+            return;
+        }
+        if (!$inBranch) {
+            $scopes[$top]['vars'][$varName] = $newType;
+
+            return;
+        }
+
+        if (!isset($scopes[$top]['vars'][$varName])) {
+            $scopes[$top]['vars'][$varName] = self::AMBIGUOUS;
+        } elseif ($scopes[$top]['vars'][$varName] !== $newType) {
+            $scopes[$top]['vars'][$varName] = self::AMBIGUOUS;
+        }
+    }
+
+    /**
+     * @param list<array{id: int|string, text: string, start: int, end: int}> $tokens
+     * @return array<string, true> lowercase class names that resolve to TreeBuilder
+     */
+    private static function collectTreeBuilderAliases(array $tokens): array
+    {
+        $aliases = [self::LOWER_TREE_BUILDER => true];
+        $total = count($tokens);
+        for ($i = 0; $i < $total; ++$i) {
+            if ($tokens[$i]['id'] === T_CLASS) {
                 break;
             }
+            if ($tokens[$i]['id'] !== T_USE) {
+                continue;
+            }
+            $j = $i + 1;
+            $fqn = '';
+            while ($j < $total && ($tokens[$j]['id'] === T_NAME_QUALIFIED || $tokens[$j]['id'] === T_NAME_FULLY_QUALIFIED || $tokens[$j]['id'] === T_STRING)) {
+                $fqn .= $tokens[$j]['text'];
+                ++$j;
+            }
+            $normalized = strtolower(ltrim($fqn, '\\'));
+            if ($normalized !== self::LOWER_TREE_BUILDER) {
+                continue;
+            }
+            if (isset($tokens[$j], $tokens[$j + 1]) && $tokens[$j]['id'] === T_AS && $tokens[$j + 1]['id'] === T_STRING) {
+                $aliases[strtolower($tokens[$j + 1]['text'])] = true;
+            } else {
+                $aliases['treebuilder'] = true;
+            }
         }
-        $argumentList ??= $source->getFirstDescendant($instantiation, NodeKind::ArgumentList);
-        if ($argumentList === null) {
+
+        return $aliases;
+    }
+
+    /**
+     * @param list<array{id: int|string, text: string, start: int, end: int}> $tokens
+     * @param array<string, true> $treeBuilderAliases
+     */
+    private static function parseRhsTreeBuilderType(array $tokens, int $rhsStart, array $treeBuilderAliases): ?string
+    {
+        $idx = $rhsStart;
+        while (isset($tokens[$idx]) && $tokens[$idx]['id'] === '(') {
+            ++$idx;
+        }
+
+        if (!isset($tokens[$idx]) || $tokens[$idx]['id'] !== T_NEW) {
+            return null;
+        }
+
+        return self::parseNewTreeBuilderType($tokens, $idx, $treeBuilderAliases);
+    }
+
+    /**
+     * @param list<array{id: int|string, text: string, start: int, end: int}> $tokens
+     * @param array<string, true> $treeBuilderAliases
+     */
+    private static function parseNewTreeBuilderType(array $tokens, int $newIdx, array $treeBuilderAliases): ?string
+    {
+        $classIdx = $newIdx + 1;
+        if (!isset($tokens[$classIdx])) {
+            return null;
+        }
+
+        $classId = $tokens[$classIdx]['id'];
+        if ($classId !== T_STRING && $classId !== T_NAME_QUALIFIED && $classId !== T_NAME_FULLY_QUALIFIED) {
+            return null;
+        }
+
+        $className = strtolower(ltrim($tokens[$classIdx]['text'], '\\'));
+        if (!isset($treeBuilderAliases[$className])) {
+            return null;
+        }
+
+        $openParen = $classIdx + 1;
+        if (!isset($tokens[$openParen]) || $tokens[$openParen]['id'] !== '(') {
             return 'array';
         }
 
-        $positionalIndex = 0;
+        $closeParen = self::findMatchingDelimiter($tokens, $openParen, '(', ')');
+        if ($closeParen === null) {
+            return self::AMBIGUOUS;
+        }
+
+        return self::extractTypeFromArgTokens($tokens, $openParen + 1, $closeParen);
+    }
+
+    /**
+     * @param list<array{id: int|string, text: string, start: int, end: int}> $tokens
+     */
+    private static function extractTypeFromArgTokens(array $tokens, int $start, int $end): string
+    {
+        /** @var list<array{int, int}> $argRanges */
+        $argRanges = [];
+        $argStart = $start;
+        $depth = 0;
+        for ($i = $start; $i < $end; ++$i) {
+            $id = $tokens[$i]['id'];
+            if ($id === '(' || $id === '[' || $id === '{') {
+                ++$depth;
+            } elseif ($id === ')' || $id === ']' || $id === '}') {
+                --$depth;
+            } elseif ($id === ',' && $depth === 0) {
+                $argRanges[] = [$argStart, $i];
+                $argStart = $i + 1;
+            }
+        }
+        if ($argStart < $end) {
+            $argRanges[] = [$argStart, $end];
+        }
+
+        $positional = 0;
         $hasTypeArg = false;
-        foreach ($source->getChildren($argumentList) as $argument) {
-            $variant = $source->getChildren($argument)[0] ?? null;
-            if ($variant === null) {
+        foreach ($argRanges as [$aStart, $aEnd]) {
+            if ($aStart >= $aEnd) {
                 continue;
             }
 
-            if ($variant->kind === NodeKind::PositionalArgument) {
-                if ($positionalIndex === 1) {
+            if (
+                $aStart + 2 <= $aEnd
+                && $tokens[$aStart]['id'] === T_STRING
+                && $tokens[$aStart + 1]['id'] === ':'
+            ) {
+                if ($tokens[$aStart]['text'] === 'type') {
                     $hasTypeArg = true;
-                    $value = $source->getChildren($variant)[0] ?? null;
-                    $literal = $value !== null ? self::extractLiteralString($source, $value) : null;
 
-                    return $literal !== null ? strtolower($literal) : null;
+                    return self::extractLiteralRootType($tokens, $aStart + 2, $aEnd);
                 }
-                ++$positionalIndex;
                 continue;
             }
 
-            if ($variant->kind === NodeKind::NamedArgument) {
-                $argChildren = $source->getChildren($variant);
-                $label = $argChildren[0] ?? null;
-                $value = $argChildren[1] ?? null;
-                if ($label !== null && $value !== null && $source->getText($label) === 'type') {
-                    $hasTypeArg = true;
-                    $literal = self::extractLiteralString($source, $value);
+            if ($positional === 1) {
+                $hasTypeArg = true;
 
-                    return $literal !== null ? strtolower($literal) : null;
-                }
+                return self::extractLiteralRootType($tokens, $aStart, $aEnd);
             }
+            ++$positional;
         }
 
-        return $hasTypeArg ? null : 'array';
+        return $hasTypeArg ? self::AMBIGUOUS : 'array';
     }
 
-    private static function calledMethodName(SourceFile $source, Node $call): ?string
+    /**
+     * @param list<array{id: int|string, text: string, start: int, end: int}> $tokens
+     */
+    private static function extractLiteralRootType(array $tokens, int $start, int $end): string
     {
-        $member = $source->getChildren($call)[1] ?? null;
-        if ($member === null) {
-            return null;
+        while ($start < $end && $tokens[$start]['id'] === '(' && $tokens[$end - 1]['id'] === ')') {
+            ++$start;
+            --$end;
         }
-        $selector = $source->getChildren($member)[0] ?? null;
 
-        return $selector !== null && $selector->kind === NodeKind::LocalIdentifier
-            ? $source->getText($selector)
-            : null;
+        if ($end - $start !== 1 || $tokens[$start]['id'] !== T_CONSTANT_ENCAPSED_STRING) {
+            return self::AMBIGUOUS;
+        }
+
+        $raw = $tokens[$start]['text'];
+        if (strlen($raw) < 2) {
+            return self::AMBIGUOUS;
+        }
+
+        $value = strtolower(substr($raw, 1, -1));
+        if ($value === 'array' || isset(self::NON_ARRAY_TYPES[$value])) {
+            return $value;
+        }
+
+        return self::AMBIGUOUS;
     }
 
-    private static function directVariableName(SourceFile $source, ?Node $node): ?string
-    {
-        $unwrapped = self::unwrap($source, $node);
-        if ($unwrapped === null || $unwrapped->kind !== NodeKind::DirectVariable) {
-            return null;
+    /**
+     * @param list<array{id: int|string, text: string, start: int, end: int}> $tokens
+     * @param array<string, true> $treeBuilderAliases
+     * @param list<array{braceDepth: int, vars: array<string, string>, branchDepth: int}> $scopes
+     */
+    private static function resolveReceiverRootType(
+        array $tokens,
+        int $recvStart,
+        int $recvEnd,
+        array $treeBuilderAliases,
+        array $scopes,
+    ): ?string {
+        $start = $recvStart;
+        $end = $recvEnd;
+        while ($start < $end && $tokens[$start]['id'] === '(' && $tokens[$end]['id'] === ')') {
+            $match = self::findMatchingDelimiter($tokens, $start, '(', ')');
+            if ($match !== $end) {
+                break;
+            }
+            ++$start;
+            --$end;
         }
 
-        return $source->getText($unwrapped);
-    }
+        if ($start === $end && $tokens[$start]['id'] === T_VARIABLE) {
+            $varName = $tokens[$start]['text'];
+            $topVars = $scopes[count($scopes) - 1]['vars'];
 
-    private static function extractLiteralString(SourceFile $source, Node $node): ?string
-    {
-        $node = self::unwrap($source, $node);
-        if ($node === null) {
-            return null;
+            return $topVars[$varName] ?? null;
         }
 
-        $literal = $source->getLiteralString($node);
-        if ($literal !== null) {
-            return $literal;
-        }
-
-        $text = $source->getText($node);
-        if (strlen($text) >= 2 && (($text[0] === "'" && $text[-1] === "'") || ($text[0] === '"' && $text[-1] === '"'))) {
-            return substr($text, 1, -1);
+        if ($tokens[$start]['id'] === T_NEW) {
+            return self::parseNewTreeBuilderType($tokens, $start, $treeBuilderAliases);
         }
 
         return null;
     }
 
-    private static function unwrap(SourceFile $source, ?Node $node): ?Node
+    /**
+     * Finds the start token index of the receiver expression immediately preceding `->getRootNode()`.
+     *
+     * @param list<array{id: int|string, text: string, start: int, end: int}> $tokens
+     */
+    private static function findReceiverStartIndex(array $tokens, int $endIdx): ?int
     {
-        while (
-            $node !== null
-            && (
-                $node->kind === NodeKind::Expression
-                || $node->kind === NodeKind::Call
-                || $node->kind === NodeKind::Parenthesized
-                || $node->kind === NodeKind::Variable
-                || $node->kind === NodeKind::Literal
-                || $node->kind === NodeKind::ConstantAccess
-            )
-        ) {
-            $node = $source->getChildren($node)[0] ?? null;
+        if ($endIdx < 0 || !isset($tokens[$endIdx])) {
+            return null;
         }
 
-        return $node;
+        if ($tokens[$endIdx]['id'] === T_VARIABLE) {
+            return $endIdx;
+        }
+
+        if ($tokens[$endIdx]['id'] === ')') {
+            $depth = 0;
+            for ($k = $endIdx; $k >= 0; --$k) {
+                $id = $tokens[$k]['id'];
+                if ($id === ')') {
+                    ++$depth;
+                } elseif ($id === '(') {
+                    --$depth;
+                    if ($depth === 0) {
+                        return $k;
+                    }
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * @param list<array{id: int|string, text: string, start: int, end: int}> $tokens
+     */
+    private static function findNextToken(array $tokens, int $from, int|string $target): ?int
+    {
+        $total = count($tokens);
+        for ($i = $from; $i < $total; ++$i) {
+            if ($tokens[$i]['id'] === $target) {
+                return $i;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * @param list<array{id: int|string, text: string, start: int, end: int}> $tokens
+     */
+    private static function findTokenInRange(array $tokens, int $start, int $end, int|string $target): ?int
+    {
+        for ($i = $start; $i < $end; ++$i) {
+            if ($tokens[$i]['id'] === $target) {
+                return $i;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * @param list<array{id: int|string, text: string, start: int, end: int}> $tokens
+     */
+    private static function findMatchingDelimiter(array $tokens, int $openIdx, string $open, string $close): ?int
+    {
+        $depth = 0;
+        $total = count($tokens);
+        for ($i = $openIdx; $i < $total; ++$i) {
+            $id = $tokens[$i]['id'];
+            if ($id === $open) {
+                ++$depth;
+            } elseif ($id === $close) {
+                --$depth;
+                if ($depth === 0) {
+                    return $i;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * @param list<array{id: int|string, text: string, start: int, end: int}> $tokens
+     */
+    private static function skipArrowExpression(array $tokens, int $start): int
+    {
+        $depth = 0;
+        $total = count($tokens);
+        for ($i = $start; $i < $total; ++$i) {
+            $id = $tokens[$i]['id'];
+            if ($id === '(' || $id === '[' || $id === '{') {
+                ++$depth;
+            } elseif ($id === ')' || $id === ']' || $id === '}') {
+                if ($depth === 0) {
+                    return $i - 1;
+                }
+                --$depth;
+            } elseif ($depth === 0 && ($id === ';' || $id === ',')) {
+                return $i - 1;
+            }
+        }
+
+        return $total - 1;
     }
 }

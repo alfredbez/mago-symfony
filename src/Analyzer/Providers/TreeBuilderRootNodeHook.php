@@ -8,8 +8,6 @@ use Mago\Sdk\Analyzer\FileAnalysisRequirement;
 use Mago\Sdk\Analyzer\MethodCallAnalysisHook;
 use Mago\Sdk\Analyzer\MethodTarget;
 use Mago\Sdk\Analyzer\NodeAnalysisContext;
-use Mago\Sdk\Analyzer\Type;
-use Mago\Sdk\Analyzer\Type\NamedObjectType;
 use Mago\Sdk\Reporting\Issue;
 use Mago\Sdk\Reporting\Level;
 use Mago\Sdk\SourceLocation;
@@ -52,6 +50,10 @@ final class TreeBuilderRootNodeHook implements MethodCallAnalysisHook
     /** @var array<int, array<int, Node>> */
     private array $methodCallsBySpan = [];
 
+    public function __construct(
+        private readonly ?TreeBuilderRootNodeIndex $index = null,
+    ) {}
+
     public function getTargets(): array
     {
         return [
@@ -64,7 +66,6 @@ final class TreeBuilderRootNodeHook implements MethodCallAnalysisHook
         return [
             FileAnalysisRequirement::SourceText,
             FileAnalysisRequirement::TargetSubtree,
-            FileAnalysisRequirement::TargetExpressionTypes,
         ];
     }
 
@@ -149,7 +150,7 @@ final class TreeBuilderRootNodeHook implements MethodCallAnalysisHook
             return;
         }
 
-        if ($this->targetAlreadyTypedAs($context->targetType, $actualNodeClass)) {
+        if ($this->index !== null && $this->index->rootTypeForSpan($call->span) === $lowerType) {
             return;
         }
 
@@ -159,17 +160,6 @@ final class TreeBuilderRootNodeHook implements MethodCallAnalysisHook
         if ($assignedVar !== null) {
             $this->checkVariableUsages($context, $source, $scope, $assignedVar, $call->span->end, $actualNodeClass, $nodeType);
         }
-    }
-
-    private function targetAlreadyTypedAs(?Type $targetType, string $expectedClass): bool
-    {
-        if ($targetType === null || count($targetType->atomicTypes) !== 1) {
-            return false;
-        }
-
-        $atomic = $targetType->atomicTypes[0];
-
-        return $atomic instanceof NamedObjectType && strcasecmp($atomic->name, $expectedClass) === 0;
     }
 
     private function enclosingScope(SourceFile $source, Node $node): Node
@@ -250,6 +240,17 @@ final class TreeBuilderRootNodeHook implements MethodCallAnalysisHook
                     $latest = ($rhsUnwrapped !== null && $this->isTreeBuilderInstantiation($source, $rhsUnwrapped))
                         ? $rhsUnwrapped
                         : null;
+                }
+            } elseif (
+                $node->kind === NodeKind::ForeachTarget
+                || $node->kind === NodeKind::TryCatchClause
+                || $node->kind === NodeKind::Unset
+            ) {
+                foreach ($source->getDescendants($node, NodeKind::DirectVariable) as $targetVar) {
+                    if ($source->getText($targetVar) === $varName) {
+                        $latest = null;
+                        break;
+                    }
                 }
             }
 

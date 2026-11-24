@@ -65,6 +65,7 @@ final class ConsoleCommandArgumentsHook implements ClassLikeAnalysisHook
         }
 
         $configure = null;
+        $constructor = null;
         $methods = [];
         foreach ($source->getDescendants($classNode, NodeKind::Method) as $method) {
             if ($this->isNestedClass($source, $classNode, $method)) {
@@ -73,6 +74,9 @@ final class ConsoleCommandArgumentsHook implements ClassLikeAnalysisHook
             $name = strtolower($this->methodName($source, $method) ?? '');
             if ($name === 'configure') {
                 $configure = $method;
+            } elseif ($name === '__construct') {
+                $constructor = $method;
+                $methods[] = $method;
             } elseif ($name !== '') {
                 $methods[] = $method;
             }
@@ -99,10 +103,43 @@ final class ConsoleCommandArgumentsHook implements ClassLikeAnalysisHook
             return;
         }
 
-        $className = $this->className($source, $classNode);
-        foreach ($methods as $method) {
-            $this->checkInputCalls($context, $source, $method, $className, $definition);
+        if ($constructor !== null && $this->constructorMayConfigureInputs($source, $constructor)) {
+            return;
         }
+
+        $className = $this->className($source, $classNode);
+        $hasCustomParent = $this->hasCustomCommandParent($context, $className);
+        $checkEmptyArguments = !$hasCustomParent;
+        $checkEmptyOptions = !$hasCustomParent;
+        foreach ($methods as $method) {
+            $this->checkInputCalls($context, $source, $method, $className, $definition, $checkEmptyArguments, $checkEmptyOptions);
+        }
+    }
+
+    private function constructorMayConfigureInputs(SourceFile $source, Node $constructor): bool
+    {
+        foreach ($source->getDescendants($constructor, NodeKind::MethodCall) as $call) {
+            $called = strtolower(ConsoleCommandDefinition::calledMethodName($source, $call) ?? '');
+            if ($called === 'addargument' || $called === 'addoption' || $called === 'setdefinition') {
+                return true;
+            }
+            $rawRecv = ConsoleCommandDefinition::unwrap($source, $source->getChildren($call)[0] ?? null);
+            if ($rawRecv !== null && $source->getText($rawRecv) === '$this') {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function hasCustomCommandParent(NodeAnalysisContext $context, string $className): bool
+    {
+        $meta = $context->codebase->getClass($className);
+        if ($meta === null || $meta->directParentClass === null) {
+            return false;
+        }
+
+        return strtolower(ltrim($meta->directParentClass, '\\')) !== strtolower(self::COMMAND);
     }
 
     private function checkInputCalls(
@@ -111,6 +148,8 @@ final class ConsoleCommandArgumentsHook implements ClassLikeAnalysisHook
         Node $method,
         string $className,
         ConsoleCommandDefinition $definition,
+        bool $checkEmptyArguments,
+        bool $checkEmptyOptions,
     ): void {
         foreach ($source->getDescendants($method, NodeKind::MethodCall) as $call) {
             $called = strtolower(ConsoleCommandDefinition::calledMethodName($source, $call) ?? '');
@@ -131,7 +170,7 @@ final class ConsoleCommandArgumentsHook implements ClassLikeAnalysisHook
                 continue;
             }
 
-            if ($called === 'getargument' && !isset($definition->arguments[$name])) {
+            if ($called === 'getargument' && ($definition->arguments !== [] || $checkEmptyArguments) && !isset($definition->arguments[$name])) {
                 if ($name === 'command') {
                     continue;
                 }
@@ -143,7 +182,7 @@ final class ConsoleCommandArgumentsHook implements ClassLikeAnalysisHook
                         new SourceLocation($context->analysis->file, $argNode->span),
                     ),
                 );
-            } elseif ($called === 'getoption' && !isset($definition->options[$name])) {
+            } elseif ($called === 'getoption' && ($definition->options !== [] || $checkEmptyOptions) && !isset($definition->options[$name])) {
                 $normalizedLookup = ltrim($name, '-');
                 if (isset($definition->options[$normalizedLookup]) || isset(self::DEFAULT_APPLICATION_OPTIONS[$normalizedLookup])) {
                     continue;

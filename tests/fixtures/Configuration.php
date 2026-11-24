@@ -14,8 +14,7 @@ final class CustomNodeBuilder extends NodeBuilder
 }
 
 /**
- * The fluent shape used by the shop (library/sfm-bridge-bundle Configuration
- * and library/SFM/Meta/MetaConfiguration).
+ * Fluent Symfony Config TreeBuilder and ArrayNodeDefinition chains.
  */
 final class Configuration implements ConfigurationInterface
 {
