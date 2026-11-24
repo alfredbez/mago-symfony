@@ -131,7 +131,7 @@ final class ConsoleCommandArgumentsHook implements ClassLikeAnalysisHook
                 continue;
             }
 
-            if ($called === 'getargument' && $definition->arguments !== [] && !isset($definition->arguments[$name])) {
+            if ($called === 'getargument' && !isset($definition->arguments[$name])) {
                 if ($name === 'command') {
                     continue;
                 }
@@ -143,7 +143,7 @@ final class ConsoleCommandArgumentsHook implements ClassLikeAnalysisHook
                         new SourceLocation($context->analysis->file, $argNode->span),
                     ),
                 );
-            } elseif ($called === 'getoption' && $definition->options !== [] && !isset($definition->options[$name])) {
+            } elseif ($called === 'getoption' && !isset($definition->options[$name])) {
                 $normalizedLookup = ltrim($name, '-');
                 if (isset($definition->options[$normalizedLookup]) || isset(self::DEFAULT_APPLICATION_OPTIONS[$normalizedLookup])) {
                     continue;

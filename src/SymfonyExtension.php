@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace AlfredBez\MagoSymfony;
 
 use AlfredBez\MagoSymfony\Analyzer\SymfonyPlugin;
+use AlfredBez\MagoSymfony\Analyzer\TreeBuilderRootTypePlugin;
 use Mago\Sdk\Extension;
 
 final class SymfonyExtension
@@ -19,7 +20,10 @@ final class SymfonyExtension
             identifier: 'alfredbez/mago-symfony',
             name: 'Symfony',
             version: self::VERSION,
-            analyzerPlugins: [new SymfonyPlugin()],
+            analyzerPlugins: [
+                new SymfonyPlugin(),
+                new TreeBuilderRootTypePlugin(),
+            ],
         );
     }
 }

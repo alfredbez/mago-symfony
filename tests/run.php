@@ -19,7 +19,12 @@ putenv('MAGO_SYMFONY_CONTAINER_MAP=' . __DIR__ . '/container-map.json');
 
 $failures = 0;
 
-$version = trim(run([PHP_BINARY, 'vendor/bin/mago', '--version'])['stdout']);
+$magoBinEnv = getenv('MAGO_BIN');
+$magoCommand = ($magoBinEnv !== false && $magoBinEnv !== '')
+    ? [$magoBinEnv]
+    : [PHP_BINARY, 'vendor/bin/mago'];
+
+$version = trim(run([...$magoCommand, '--version'])['stdout']);
 fwrite(STDOUT, $version . "\n\n");
 if (preg_match('/^mago (\d+\.\d+\.\d+)/', $version, $versionMatch) !== 1 || version_compare($versionMatch[1], '1.60.2', '<')) {
     fwrite(STDERR, "The fixture expectations require Mago 1.60.2 or newer\n");
@@ -29,7 +34,7 @@ $magoVersion = $versionMatch[1];
 // Mago 1.61.0 evaluates Symfony ContainerInterface::get()'s @template B constraint and nested conditional @return.
 $magoAtLeast161 = version_compare($magoVersion, '1.61.0', '>=');
 
-$validated = run([PHP_BINARY, 'vendor/bin/mago', 'extension', 'validate']);
+$validated = run([...$magoCommand, 'extension', 'validate']);
 fwrite(STDOUT, "extension validate (exit {$validated['exit']}):\n");
 fwrite(STDOUT, trim($validated['stdout'] . $validated['stderr']) . "\n\n");
 if ($validated['exit'] !== 0) {
@@ -58,7 +63,7 @@ $expected = [
     false => [
         'tests/fixtures/TreeBuilderScopes.php' => [],
         'tests/fixtures/TreeBuilderScopesNegative.php' => [
-            'alfredbez/symfony/invalid-root-node-method' => 2,
+            'non-existent-method' => 2,
         ],
         'tests/fixtures/ConfigNodes.php' => [],
         'tests/fixtures/ConfigNodesNegative.php' => $isSymfony7
@@ -73,13 +78,11 @@ $expected = [
         'tests/fixtures/Configuration.php' => [],
         'tests/fixtures/ConfigurationNegative.php' => $isSymfony7
             ? [
-                'alfredbez/symfony/invalid-root-node-method' => 2,
                 'method-access-on-null' => 1,
-                'non-existent-method' => 3,
+                'non-existent-method' => 5,
             ]
             : [
-                'alfredbez/symfony/invalid-root-node-method' => 2,
-                'non-existent-method' => 7,
+                'non-existent-method' => 9,
                 'possible-method-access-on-null' => 1,
             ],
         'tests/fixtures/CustomNodeBuilderConfig.php' => [],
@@ -154,12 +157,12 @@ $expected = [
         'tests/fixtures/Configuration.php' => $isSymfony7
             ? [
                 'invalid-return-statement' => 1,
-                'non-existent-method' => 16,
+                'non-existent-method' => 31,
             ]
             : [
                 'less-specific-return-statement' => 1,
-                'mixed-method-access' => 2,
-                'non-existent-method' => 26,
+                'mixed-method-access' => 5,
+                'non-existent-method' => 30,
                 'possible-method-access-on-null' => 9,
             ],
         'tests/fixtures/ConfigurationNegative.php' => $isSymfony7
@@ -267,14 +270,6 @@ $failures += assertMessageCount(
     'with extension',
     $with,
     'tests/fixtures/ConfigurationNegative.php',
-    'alfredbez/symfony/invalid-root-node-method',
-    'ScalarNodeDefinition',
-    2,
-);
-$failures += assertMessageCount(
-    'with extension',
-    $with,
-    'tests/fixtures/ConfigurationNegative.php',
     'non-existent-method',
     'TreeBuilder',
     1,
@@ -285,7 +280,7 @@ $failures += assertMessageCount(
     'tests/fixtures/ConfigurationNegative.php',
     'non-existent-method',
     'ScalarNodeDefinition',
-    1,
+    3,
 );
 $failures += assertMessageCount(
     'with extension',
@@ -316,8 +311,8 @@ $sites = [
     false => [
         'tests/fixtures/TreeBuilderScopes.php' => [],
         'tests/fixtures/TreeBuilderScopesNegative.php' => [
-            '20:alfredbez/symfony/invalid-root-node-method',
-            '32:alfredbez/symfony/invalid-root-node-method',
+            '20:non-existent-method',
+            '32:non-existent-method',
         ],
         'tests/fixtures/ConfigNodes.php' => [],
         'tests/fixtures/ConfigNodesNegative.php' => [
@@ -566,8 +561,8 @@ $xmlExpected = [
             'possibly-null-argument' => 1,
         ],
         'tests/fixtures-xml/ConsoleCommandNegative.php' => [
-            'alfredbez/symfony/unknown-console-argument' => 2,
-            'alfredbez/symfony/unknown-console-option' => 2,
+            'alfredbez/symfony/unknown-console-argument' => 3,
+            'alfredbez/symfony/unknown-console-option' => 3,
         ],
         'tests/fixtures-xml/Wave4ContractsNegative.php' => [
             'invalid-return-statement' => 1,
@@ -717,6 +712,8 @@ $failures += assertMessageCount('xml with extension', $xmlWith, 'tests/fixtures-
 $failures += assertMessageCount('xml with extension', $xmlWith, 'tests/fixtures-xml/ConsoleCommandNegative.php', 'alfredbez/symfony/unknown-console-option', 'dryrun', 1);
 $failures += assertMessageCount('xml with extension', $xmlWith, 'tests/fixtures-xml/ConsoleCommandNegative.php', 'alfredbez/symfony/unknown-console-argument', 'missing_target', 1);
 $failures += assertMessageCount('xml with extension', $xmlWith, 'tests/fixtures-xml/ConsoleCommandNegative.php', 'alfredbez/symfony/unknown-console-option', 'missing_force', 1);
+$failures += assertMessageCount('xml with extension', $xmlWith, 'tests/fixtures-xml/ConsoleCommandNegative.php', 'alfredbez/symfony/unknown-console-argument', 'undeclared_arg', 1);
+$failures += assertMessageCount('xml with extension', $xmlWith, 'tests/fixtures-xml/ConsoleCommandNegative.php', 'alfredbez/symfony/unknown-console-option', 'undeclared-opt', 1);
 $failures += assertMessageCount('xml with extension', $xmlWith, 'tests/fixtures-xml/Wave4ContractsNegative.php', 'non-existent-method', 'FormErrorIterator', 1);
 $failures += assertMessageCount('xml with extension', $xmlWith, 'tests/fixtures-xml/Wave4ContractsNegative.php', 'non-existent-method', 'nonExistentMethodOnDomainEvent', 1);
 $failures += assertMessageCount('xml with extension', $xmlWith, 'tests/fixtures-xml/Wave4ContractsNegative.php', 'non-existent-method', 'anotherMissingMethod', 1);
@@ -811,7 +808,10 @@ function run(array $command): array
 /** @return list<array{level: string, code: string, file: string, line: int, message: string}> */
 function analyze(bool $noExtensions, ?string $config = null): array
 {
-    $command = [PHP_BINARY, 'vendor/bin/mago'];
+    $magoBinEnv = getenv('MAGO_BIN');
+    $command = ($magoBinEnv !== false && $magoBinEnv !== '')
+        ? [$magoBinEnv]
+        : [PHP_BINARY, 'vendor/bin/mago'];
     if ($config !== null) {
         $command[] = '--config';
         $command[] = $config;

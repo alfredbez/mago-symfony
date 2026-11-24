@@ -91,7 +91,10 @@ final class Configuration implements ConfigurationInterface
     public function scalarRootTreeBuilder(): void
     {
         $treeBuilder = new TreeBuilder('scalar_root', 'scalar');
-        $treeBuilder->getRootNode()->isRequired()->end();
+        $treeBuilder->getRootNode()->isRequired()->cannotBeEmpty()->end();
+
+        (new TreeBuilder('enum_root', 'enum'))->getRootNode()->values(['fast', 'slow'])->end();
+        (new TreeBuilder('int_root', 'integer'))->getRootNode()->min(1)->max(10)->end();
     }
 
     public function customNodeBuilder(CustomNodeBuilder $builder): ?ArrayNodeDefinition

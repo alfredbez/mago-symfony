@@ -306,4 +306,37 @@ $failedEx = new \Symfony\Component\Messenger\Exception\HandlerFailedException(
 $filteredEx = $failedEx->getWrappedExceptions(\SymfonyFixtureXml\Wave6DomainException::class);
 check(count($filteredEx) === 1 && isset($filteredEx['handler.a']) && $filteredEx['handler.a'] === $domainEx, 'HandlerFailedException::getWrappedExceptions preserves string handler keys and filters by class');
 
+check(
+    (new \Symfony\Component\Config\Definition\Builder\TreeBuilder('scalar_root', 'scalar'))->getRootNode() instanceof \Symfony\Component\Config\Definition\Builder\ScalarNodeDefinition,
+    'TreeBuilder with scalar root returns ScalarNodeDefinition',
+);
+check(
+    (new \Symfony\Component\Config\Definition\Builder\TreeBuilder('enum_root', 'enum'))->getRootNode() instanceof \Symfony\Component\Config\Definition\Builder\EnumNodeDefinition,
+    'TreeBuilder with enum root returns EnumNodeDefinition',
+);
+check(
+    (new \Symfony\Component\Config\Definition\Builder\TreeBuilder('int_root', 'integer'))->getRootNode() instanceof \Symfony\Component\Config\Definition\Builder\IntegerNodeDefinition,
+    'TreeBuilder with integer root returns IntegerNodeDefinition',
+);
+
+$optionOnlyDef = new \Symfony\Component\Console\Input\InputDefinition([
+    new \Symfony\Component\Console\Input\InputOption('dry-run', null, \Symfony\Component\Console\Input\InputOption::VALUE_NONE),
+]);
+$optionOnlyInput = new \Symfony\Component\Console\Input\ArrayInput([], $optionOnlyDef);
+try {
+    $optionOnlyInput->getArgument('undeclared_arg');
+    throw new RuntimeException('Option-only InputDefinition must reject undeclared argument');
+} catch (\Symfony\Component\Console\Exception\InvalidArgumentException) {
+}
+
+$argOnlyDef = new \Symfony\Component\Console\Input\InputDefinition([
+    new \Symfony\Component\Console\Input\InputArgument('target', \Symfony\Component\Console\Input\InputArgument::REQUIRED),
+]);
+$argOnlyInput = new \Symfony\Component\Console\Input\ArrayInput(['target' => 'x'], $argOnlyDef);
+try {
+    $argOnlyInput->getOption('undeclared-opt');
+    throw new RuntimeException('Argument-only InputDefinition must reject undeclared option');
+} catch (\Symfony\Component\Console\Exception\InvalidArgumentException) {
+}
+
 fwrite(STDOUT, "Symfony runtime contracts PASS\n\n");

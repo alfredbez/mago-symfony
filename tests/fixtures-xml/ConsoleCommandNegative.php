@@ -46,3 +46,37 @@ final class SetDefinitionTypoCommand extends Command
             : Command::FAILURE;
     }
 }
+
+final class OptionOnlyCommand extends Command
+{
+    protected function configure(): void
+    {
+        $this->addOption('dry-run', null, InputOption::VALUE_NONE);
+    }
+
+    protected function execute(InputInterface $input, OutputInterface $output): int
+    {
+        return $input->getArgument('command') !== null
+            && $input->getArgument('undeclared_arg') !== null
+            && $input->getOption('dry-run') !== null
+            ? Command::SUCCESS
+            : Command::FAILURE;
+    }
+}
+
+final class ArgumentOnlyCommand extends Command
+{
+    protected function configure(): void
+    {
+        $this->addArgument('target', InputArgument::REQUIRED);
+    }
+
+    protected function execute(InputInterface $input, OutputInterface $output): int
+    {
+        return $input->getOption('verbose') !== null
+            && $input->getOption('undeclared-opt') !== null
+            && $input->getArgument('target') !== null
+            ? Command::SUCCESS
+            : Command::FAILURE;
+    }
+}

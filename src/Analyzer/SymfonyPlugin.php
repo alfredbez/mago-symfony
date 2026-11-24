@@ -18,7 +18,6 @@ use AlfredBez\MagoSymfony\Analyzer\Providers\RequestFormatReturnTypeProvider;
 use AlfredBez\MagoSymfony\Analyzer\Providers\RequestPreferredLanguageReturnTypeProvider;
 use AlfredBez\MagoSymfony\Analyzer\Providers\RequiredInitializerProvider;
 use AlfredBez\MagoSymfony\Analyzer\Providers\ResponseHeaderBagCookiesReturnTypeProvider;
-use AlfredBez\MagoSymfony\Analyzer\Providers\RootNodeReturnTypeProvider;
 use AlfredBez\MagoSymfony\Analyzer\Providers\SecurityUserReturnTypeProvider;
 use AlfredBez\MagoSymfony\Analyzer\Providers\SerializerReturnTypeProvider;
 use AlfredBez\MagoSymfony\Analyzer\Providers\ServiceClassMap;
@@ -49,7 +48,6 @@ final class SymfonyPlugin implements Plugin
         if ($container->hasParameters()) {
             $registry->registerMethodReturnTypeProvider(new ParameterReturnTypeProvider($container));
         }
-        $registry->registerMethodReturnTypeProvider(new RootNodeReturnTypeProvider());
         $registry->registerMethodReturnTypeProvider(new ConfigEndReturnTypeProvider());
         $registry->registerMethodReturnTypeProvider(new HeaderBagGetReturnTypeProvider());
         $registry->registerMethodReturnTypeProvider(new ParameterBagEnumReturnTypeProvider());

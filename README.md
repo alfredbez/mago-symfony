@@ -63,7 +63,7 @@ Service and parameter types come from Symfony's compiled container. Point the ex
 | `MAGO_SYMFONY_USER_CLASS` | FQCN of a class or interface that implements `UserInterface`. Narrows Security `getUser()` to `ConfiguredUser` or `null`. |
 | `MAGO_SYMFONY_STRICT_CONTAINER_SERVICES` | Set to `1` to report `alfredbez/symfony/unknown-service-id` for literal IDs that are missing from the compiled XML. Requires a loaded XML dump. |
 
-Without a compiled dump or JSON map, a class-name service ID is a typing convention, not proof that the container registered it.
+Without a compiled dump or JSON map, a class-name service ID resolves to that declared class or interface rather than any container alias or decorator, and non-class string service IDs such as `logger` stay `mixed`.
 
 ## Checks
 
@@ -116,7 +116,7 @@ $container->get('app.private_service');
 ## Known limitations
 
 - `ContainerInterface::has()` cannot narrow a later `get()`. Mago `1.60.2` through `1.61.0` narrows only parameter variables and `$this` in invocation assertions.
-- Return-type providers cannot read the enclosing `Command` class or the `TreeBuilder` constructor syntax. Per-command narrowing of `getArgument()` and `getOption()` stays blocked in the Mago SDK. The extension validates argument and option names instead.
+- Return-type providers cannot read the enclosing `Command` class. Per-command narrowing of `getArgument()` and `getOption()` stays blocked in the Mago SDK. The extension validates argument and option names instead.
 - `SessionInterface::get()`, `InputBag::get()`, `Route::getDefault()`, and `FormConfigInterface::getOption()` are not narrowed on defaults. A stored `null` or a configured value can bypass the default at runtime.
 - `HandledStamp::getResult()` stays `mixed` because compiled container XML has no message-to-handler return graph.
 - `Envelope::last()`, `Envelope::all()`, `Request::getContent()`, `FileLocatorInterface::locate()`, `EventDispatcherInterface::dispatch()`, `CacheInterface::get()`, `ValidatorInterface::validate()`, `RouteCollection`, `FormView`, and Twig helpers are already typed by Mago from Symfony 6.4 and 7.x vendor signatures.
