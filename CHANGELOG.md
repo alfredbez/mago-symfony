@@ -6,6 +6,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-11-24
+
+### Fixed
+
+- Console command validation reports undeclared `getArgument()` calls on option-only commands and undeclared `getOption()` calls on argument-only commands while preserving default `command` and application options and skipping constructor-configured commands.
+- `TreeBuilder::getRootNode()` resolves concrete non-array root node types (`ScalarNodeDefinition`, `EnumNodeDefinition`, `IntegerNodeDefinition`, and siblings) from constructor literals and template parameters while avoiding duplicate diagnostics with `invalid-root-node-method` and leaving ambiguous or rebound spans conservative.
+- Documented the compiled container XML and JSON map boundary for class-name aliases, decorators, and raw service IDs.
+
 ## [0.1.0] - 2026-11-22
 
 Version `0.1.0` targets Mago `^1.60.2` (verified on `1.60.2` and `1.61.0`) and Symfony `^6.4 || ^7.0`.

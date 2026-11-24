@@ -123,7 +123,7 @@ $expected = [
     ],
     true => [
         'tests/fixtures/TreeBuilderScopes.php' => [
-            'non-existent-method' => $isSymfony7 ? 8 : 1,
+            'non-existent-method' => $isSymfony7 ? 8 : 2,
         ],
         'tests/fixtures/TreeBuilderScopesNegative.php' => $isSymfony7
             ? [
@@ -351,6 +351,7 @@ $sites = [
             ? array_fill(0, 8, '20:non-existent-method')
             : [
                 '20:non-existent-method',
+                '40:non-existent-method',
             ],
         'tests/fixtures/TreeBuilderScopesNegative.php' => $isSymfony7
             ? [
