@@ -11,7 +11,7 @@ use Mago\Sdk\Extension;
 
 final class SymfonyExtension
 {
-    public const VERSION = '0.1.2';
+    public const VERSION = '0.1.3';
 
     private function __construct() {}
 

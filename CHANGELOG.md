@@ -6,6 +6,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-11-25
+
+### Fixed
+
+- Console command declaration validation checks literal `InputArgument` (`1..7`) and `InputOption` (`1..31`) bitmask bounds, signed/base-prefixed integer literals, and `setDefinition()` definitions against Symfony runtime rules while keeping dynamic modes conservative.
+- Console option declarations mirror Symfony's single leading `--` strip instead of `ltrim(..., '-')`, keeping single-dash option names such as `-dash` aligned with exact `getOption()` lookups, reporting stripped mismatches and empty option names, and preserving `VALUE_NEGATABLE` (`no-*`) and `--known` checks.
+- Default application console options are derived from the analyzed `Symfony\Component\Console\Application` class (plus `Symfony\Bundle\FrameworkBundle\Console\Application` when present in the codebase) rather than unconditionally whitelisting `silent`, `env`, `no-debug`, and `profile`, while preserving command-local declarations.
+- Symfony 7 `TreeBuilder` return filtering uses path-sensitive control-flow analysis so conditional or exception-path rebindings with a reachable incompatible root type keep Mago's native `invalid-return-statement` diagnostic, while dominated compatible returns stay clean.
+
 ## [0.1.2] - 2026-11-25
 
 ### Fixed
