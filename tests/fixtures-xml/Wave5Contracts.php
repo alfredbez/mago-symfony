@@ -27,13 +27,25 @@ final class Wave5HelperCommand extends Command
 {
     protected function configure(): void
     {
+        $dynamicMode = $this->dynamicMode();
+
         $this
             ->addArgument('name', InputArgument::REQUIRED)
             ->addArgument('alias_opt', CustomModes::REQUIRED, '', 'valid-default')
             ->addArgument('tags', InputArgument::OPTIONAL | InputArgument::IS_ARRAY, '', ['default'])
+            ->addArgument('array_only', InputArgument::IS_ARRAY)
+            ->addArgument('req_and_opt', InputArgument::REQUIRED | InputArgument::OPTIONAL)
+            ->addArgument('dynamic_arg', $dynamicMode)
             ->addOption('flag', null, InputOption::VALUE_NONE)
             ->addOption('items', null, InputOption::VALUE_REQUIRED | InputOption::VALUE_IS_ARRAY, '', ['a'])
-            ->addOption('color', null, InputOption::VALUE_NEGATABLE, '', true);
+            ->addOption('color', null, InputOption::VALUE_NEGATABLE, '', true)
+            ->addOption('literal_negatable', null, 16)
+            ->addOption('dynamic_opt', null, $dynamicMode);
+    }
+
+    private function dynamicMode(): int
+    {
+        return InputOption::VALUE_NONE;
     }
 
     protected function execute(InputInterface $input, OutputInterface $output): int

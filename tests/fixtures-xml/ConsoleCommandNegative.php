@@ -282,3 +282,69 @@ final class SetDefinitionDashedOptionLookupCommand extends Command
             : Command::FAILURE;
     }
 }
+
+final class SingleDashOptionLookupNegativeCommand extends Command
+{
+    protected function configure(): void
+    {
+        $this
+            ->addArgument('-arg', InputArgument::OPTIONAL)
+            ->addOption('-dash', null, InputOption::VALUE_NONE)
+            ->addOption('---triple', null, InputOption::VALUE_NONE)
+            ->addOption('--known', 'k', InputOption::VALUE_NONE);
+    }
+
+    protected function execute(InputInterface $input, OutputInterface $output): int
+    {
+        return $input->getArgument('-arg') !== null
+            && $input->getArgument('arg') !== null
+            && $input->getOption('-dash') !== null
+            && $input->getOption('dash') !== null
+            && $input->getOption('-triple') !== null
+            && $input->getOption('triple') !== null
+            && $input->getOption('---triple') !== null
+            && $input->getOption('known') !== null
+            && $input->getOption('--known') !== null
+            && $input->getOption('') !== null
+            && $input->getOption('--') !== null
+            && !$input->hasOption('dash')
+            ? Command::SUCCESS
+            : Command::FAILURE;
+    }
+}
+
+final class SetDefinitionSingleDashNegativeCommand extends Command
+{
+    protected function configure(): void
+    {
+        $this->setDefinition([
+            new InputOption('-set-dash', null, InputOption::VALUE_NONE),
+        ]);
+    }
+
+    protected function execute(InputInterface $input, OutputInterface $output): int
+    {
+        return $input->getOption('-set-dash') !== null
+            && $input->getOption('set-dash') !== null
+            ? Command::SUCCESS
+            : Command::FAILURE;
+    }
+}
+
+final class FrameworkSilentOptionCommand extends Command
+{
+    protected function configure(): void
+    {
+        $this->addOption('local', null, InputOption::VALUE_NONE);
+    }
+
+    protected function execute(InputInterface $input, OutputInterface $output): int
+    {
+        return $input->getOption('silent') !== null
+            && $input->getOption('env') !== null
+            && $input->getOption('no-debug') !== null
+            && $input->getOption('profile') !== null
+            ? Command::SUCCESS
+            : Command::FAILURE;
+    }
+}

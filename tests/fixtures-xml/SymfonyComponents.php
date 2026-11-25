@@ -236,6 +236,7 @@ final class DynamicAndBuiltinOptionsCommand extends Command
             && $input->getOption('verbose') !== null
             && $input->getOption('env') !== null
             && $input->getOption('no-debug') !== null
+            && $input->getOption('profile') !== null
             && $input->getOption('no-ansi') !== null
             ? Command::SUCCESS
             : Command::FAILURE;
@@ -469,6 +470,77 @@ final class PartialDynamicSetDefinitionCommand extends Command
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
         return $input->getArgument('known') !== null && $input->getOption('dynamic-extra') !== null
+            ? Command::SUCCESS
+            : Command::FAILURE;
+    }
+}
+
+final class SingleDashOptionCommand extends Command
+{
+    protected function configure(): void
+    {
+        $this
+            ->addArgument('-arg', InputArgument::OPTIONAL)
+            ->addOption('-dash', null, InputOption::VALUE_NONE)
+            ->addOption('---triple', null, InputOption::VALUE_NONE)
+            ->addOption('--known', 'k', InputOption::VALUE_NONE)
+            ->addOption('color', null, InputOption::VALUE_NEGATABLE);
+    }
+
+    protected function execute(InputInterface $input, OutputInterface $output): int
+    {
+        $dynamicOpt = $this->dynamicName('-dash');
+
+        return $input->getArgument('-arg') !== null
+            && $input->getOption('-dash') !== null
+            && $input->getOption('-triple') !== null
+            && $input->getOption('known') !== null
+            && $input->getOption('color') !== null
+            && $input->getOption('no-color') !== null
+            && $input->getOption($dynamicOpt) !== null
+            && $input->hasOption('-dash')
+            && !$input->hasOption('dash')
+            && !$input->hasOption('--known')
+            && !$input->hasOption('unknown')
+            && !$input->hasOption('')
+            && !$input->hasOption('--')
+            ? Command::SUCCESS
+            : Command::FAILURE;
+    }
+
+    private function dynamicName(string $name): string
+    {
+        return $name;
+    }
+}
+
+final class SetDefinitionSingleDashCommand extends Command
+{
+    protected function configure(): void
+    {
+        $this->setDefinition([
+            new InputOption('-set-dash', null, InputOption::VALUE_NONE),
+        ]);
+    }
+
+    protected function execute(InputInterface $input, OutputInterface $output): int
+    {
+        return $input->getOption('-set-dash') !== null
+            ? Command::SUCCESS
+            : Command::FAILURE;
+    }
+}
+
+final class LocalSilentOptionCommand extends Command
+{
+    protected function configure(): void
+    {
+        $this->addOption('silent', null, InputOption::VALUE_NONE);
+    }
+
+    protected function execute(InputInterface $input, OutputInterface $output): int
+    {
+        return $input->getOption('silent') !== null
             ? Command::SUCCESS
             : Command::FAILURE;
     }

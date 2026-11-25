@@ -24,6 +24,9 @@ final class ConsoleCommandArgumentsHook implements ClassLikeAnalysisHook
     public const INVALID_DEFINITION_ISSUE = 'invalid-console-input-definition';
 
     private const COMMAND = 'Symfony\\Component\\Console\\Command\\Command';
+    private const APPLICATION = 'Symfony\\Component\\Console\\Application';
+    private const FRAMEWORK_APPLICATION = 'Symfony\\Bundle\\FrameworkBundle\\Console\\Application';
+    private const OUTPUT_INTERFACE = 'Symfony\\Component\\Console\\Output\\OutputInterface';
     private const INPUT_INTERFACE = 'symfony\\component\\console\\input\\inputinterface';
 
     private const CONSTRUCTOR_INPUT_METHODS = [
@@ -34,19 +37,24 @@ final class ConsoleCommandArgumentsHook implements ClassLikeAnalysisHook
         'getnativedefinition' => true,
     ];
 
-    private const DEFAULT_APPLICATION_OPTIONS = [
+    private const FALLBACK_BASE_APPLICATION_OPTIONS = [
         'help' => true,
         'quiet' => true,
-        'silent' => true,
         'verbose' => true,
         'version' => true,
         'ansi' => true,
         'no-ansi' => true,
         'no-interaction' => true,
+    ];
+
+    private const FALLBACK_FRAMEWORK_APPLICATION_OPTIONS = [
         'env' => true,
         'no-debug' => true,
         'profile' => true,
     ];
+
+    /** @var array<string, array<string, true>> */
+    private array $applicationOptionsCache = [];
 
     public function getTargets(): array
     {
@@ -128,8 +136,9 @@ final class ConsoleCommandArgumentsHook implements ClassLikeAnalysisHook
 
         $checkEmptyArguments = !$hasCustomParent;
         $checkEmptyOptions = !$hasCustomParent;
+        $defaultApplicationOptions = $this->resolveDefaultApplicationOptions($context);
         foreach ($methods as $method) {
-            $this->checkInputCalls($context, $source, $method, $className, $definition, $checkEmptyArguments, $checkEmptyOptions);
+            $this->checkInputCalls($context, $source, $method, $className, $definition, $checkEmptyArguments, $checkEmptyOptions, $defaultApplicationOptions);
         }
     }
 
@@ -373,6 +382,9 @@ final class ConsoleCommandArgumentsHook implements ClassLikeAnalysisHook
         return strtolower(ltrim($meta->directParentClass, '\\')) !== strtolower(self::COMMAND);
     }
 
+    /**
+     * @param array<string, true> $defaultApplicationOptions
+     */
     private function checkInputCalls(
         NodeAnalysisContext $context,
         SourceFile $source,
@@ -381,6 +393,7 @@ final class ConsoleCommandArgumentsHook implements ClassLikeAnalysisHook
         ConsoleCommandDefinition $definition,
         bool $checkEmptyArguments,
         bool $checkEmptyOptions,
+        array $defaultApplicationOptions,
     ): void {
         foreach ($source->getDescendants($method, NodeKind::MethodCall) as $call) {
             $called = strtolower(ConsoleCommandDefinition::calledMethodName($source, $call) ?? '');
@@ -397,11 +410,11 @@ final class ConsoleCommandArgumentsHook implements ClassLikeAnalysisHook
             $args = ConsoleCommandDefinition::extractCallArguments($source, $call);
             $argNode = ConsoleCommandDefinition::resolveArgument($args, 0, 'name');
             $name = $argNode !== null ? ConsoleCommandDefinition::extractLiteralString($source, $argNode) : null;
-            if ($name === null || $name === '') {
+            if ($name === null) {
                 continue;
             }
 
-            if ($called === 'getargument' && ($definition->arguments !== [] || $checkEmptyArguments) && !isset($definition->arguments[$name])) {
+            if ($called === 'getargument' && $name !== '' && ($definition->arguments !== [] || $checkEmptyArguments) && !isset($definition->arguments[$name])) {
                 if ($name === 'command') {
                     continue;
                 }
@@ -416,8 +429,8 @@ final class ConsoleCommandArgumentsHook implements ClassLikeAnalysisHook
             } elseif (
                 $called === 'getoption'
                 && ($definition->options !== [] || $checkEmptyOptions)
-                && !isset($definition->options[$name])
-                && !isset(self::DEFAULT_APPLICATION_OPTIONS[$name])
+                && !$definition->hasDeclaredOption($name)
+                && !isset($defaultApplicationOptions[$name])
             ) {
                 $context->report(
                     Level::Error,
@@ -429,6 +442,283 @@ final class ConsoleCommandArgumentsHook implements ClassLikeAnalysisHook
                 );
             }
         }
+    }
+
+    /**
+     * @return array<string, true>
+     */
+    private function resolveDefaultApplicationOptions(NodeAnalysisContext $context): array
+    {
+        $baseMeta = $context->codebase->getClass(self::APPLICATION);
+        $fwMeta = $context->codebase->getClass(self::FRAMEWORK_APPLICATION);
+
+        $baseFile = $baseMeta?->location->file ?? '';
+        $fwFile = $fwMeta?->location->file ?? '';
+        $cacheKey = $baseFile . "\0" . ($fwMeta !== null ? '1:' . $fwFile : '0');
+
+        if (isset($this->applicationOptionsCache[$cacheKey])) {
+            return $this->applicationOptionsCache[$cacheKey];
+        }
+
+        $options = $this->extractOptionsFromClassFile(
+            $baseFile,
+            $context->analysis->file,
+            ['getdefaultinputdefinition'],
+        );
+        if ($options === null) {
+            $options = self::FALLBACK_BASE_APPLICATION_OPTIONS;
+            if ($context->codebase->classConstantExists(self::OUTPUT_INTERFACE, 'VERBOSITY_SILENT')) {
+                $options['silent'] = true;
+            }
+        }
+
+        if ($fwMeta !== null) {
+            $fwOptions = $this->extractOptionsFromClassFile(
+                $fwFile,
+                $context->analysis->file,
+                ['__construct', 'getdefaultinputdefinition'],
+            ) ?? self::FALLBACK_FRAMEWORK_APPLICATION_OPTIONS;
+            $options += $fwOptions;
+        }
+
+        $this->applicationOptionsCache[$cacheKey] = $options;
+
+        return $options;
+    }
+
+    /**
+     * @param list<string> $targetMethods
+     * @return array<string, true>|null
+     */
+    private function extractOptionsFromClassFile(string $file, string $analysisFile, array $targetMethods): ?array
+    {
+        $targetMethods = array_map(strtolower(...), $targetMethods);
+        $resolved = $this->resolveReadableFile($file, $analysisFile);
+        if ($resolved === null) {
+            return null;
+        }
+
+        $contents = @file_get_contents($resolved);
+        if ($contents === false || stripos($contents, 'InputOption') === false) {
+            return null;
+        }
+
+        $tokens = [];
+        foreach (token_get_all($contents) as $tok) {
+            if (is_array($tok)) {
+                if ($tok[0] === T_WHITESPACE || $tok[0] === T_COMMENT || $tok[0] === T_DOC_COMMENT) {
+                    continue;
+                }
+                $tokens[] = [$tok[0], $tok[1]];
+            } else {
+                $tokens[] = [$tok, $tok];
+            }
+        }
+
+        $targetSet = array_fill_keys($targetMethods, true);
+        $options = [];
+        $total = count($tokens);
+
+        for ($i = 0; $i < $total; ++$i) {
+            if ($tokens[$i][0] !== T_FUNCTION) {
+                continue;
+            }
+            $nameIdx = $i + 1;
+            if (isset($tokens[$nameIdx]) && $tokens[$nameIdx][0] === '&') {
+                ++$nameIdx;
+            }
+            if (!isset($tokens[$nameIdx]) || $tokens[$nameIdx][0] !== T_STRING) {
+                continue;
+            }
+            if (!isset($targetSet[strtolower($tokens[$nameIdx][1])])) {
+                continue;
+            }
+
+            $braceIdx = null;
+            for ($j = $nameIdx + 1; $j < $total; ++$j) {
+                if ($tokens[$j][0] === ';') {
+                    break;
+                }
+                if ($tokens[$j][0] === '{') {
+                    $braceIdx = $j;
+                    break;
+                }
+            }
+            if ($braceIdx === null) {
+                continue;
+            }
+
+            $depth = 0;
+            $bodyEnd = $braceIdx;
+            for ($j = $braceIdx; $j < $total; ++$j) {
+                if ($tokens[$j][0] === '{') {
+                    ++$depth;
+                } elseif ($tokens[$j][0] === '}') {
+                    --$depth;
+                    if ($depth === 0) {
+                        $bodyEnd = $j;
+                        break;
+                    }
+                }
+            }
+
+            for ($j = $braceIdx + 1; $j < $bodyEnd; ++$j) {
+                if ($tokens[$j][0] !== T_NEW || !isset($tokens[$j + 1], $tokens[$j + 2])) {
+                    continue;
+                }
+                $classTok = $tokens[$j + 1];
+                if (
+                    $classTok[0] !== T_STRING
+                    && $classTok[0] !== T_NAME_QUALIFIED
+                    && $classTok[0] !== T_NAME_FULLY_QUALIFIED
+                ) {
+                    continue;
+                }
+                $classLower = strtolower(ltrim($classTok[1], '\\'));
+                if ($classLower !== 'inputoption' && !str_ends_with($classLower, '\\inputoption')) {
+                    continue;
+                }
+                if ($tokens[$j + 2][0] !== '(') {
+                    continue;
+                }
+
+                $argDepth = 0;
+                $closeParen = null;
+                for ($k = $j + 2; $k < $bodyEnd; ++$k) {
+                    if ($tokens[$k][0] === '(') {
+                        ++$argDepth;
+                    } elseif ($tokens[$k][0] === ')') {
+                        --$argDepth;
+                        if ($argDepth === 0) {
+                            $closeParen = $k;
+                            break;
+                        }
+                    }
+                }
+                if ($closeParen === null) {
+                    continue;
+                }
+
+                $this->collectInputOptionFromTokens($tokens, $j + 3, $closeParen, $options);
+                $j = $closeParen;
+            }
+
+            $i = $bodyEnd;
+        }
+
+        return $options === [] ? null : $options;
+    }
+
+    /**
+     * @param list<array{0: int|string, 1: string}> $tokens
+     * @param array<string, true> $options
+     */
+    private function collectInputOptionFromTokens(array $tokens, int $start, int $end, array &$options): void
+    {
+        $argRanges = [];
+        $argStart = $start;
+        $depth = 0;
+        for ($i = $start; $i < $end; ++$i) {
+            $id = $tokens[$i][0];
+            if ($id === '(' || $id === '[' || $id === '{') {
+                ++$depth;
+            } elseif ($id === ')' || $id === ']' || $id === '}') {
+                --$depth;
+            } elseif ($id === ',' && $depth === 0) {
+                $argRanges[] = [$argStart, $i];
+                $argStart = $i + 1;
+            }
+        }
+        if ($argStart < $end) {
+            $argRanges[] = [$argStart, $end];
+        }
+
+        $nameRange = null;
+        $modeRange = null;
+        $positional = 0;
+        foreach ($argRanges as [$aStart, $aEnd]) {
+            if ($aStart >= $aEnd) {
+                continue;
+            }
+            if ($aStart + 2 <= $aEnd && $tokens[$aStart][0] === T_STRING && $tokens[$aStart + 1][0] === ':') {
+                $argName = $tokens[$aStart][1];
+                if ($argName === 'name') {
+                    $nameRange = [$aStart + 2, $aEnd];
+                } elseif ($argName === 'mode') {
+                    $modeRange = [$aStart + 2, $aEnd];
+                }
+                continue;
+            }
+            if ($positional === 0) {
+                $nameRange = [$aStart, $aEnd];
+            } elseif ($positional === 2) {
+                $modeRange = [$aStart, $aEnd];
+            }
+            ++$positional;
+        }
+
+        if ($nameRange === null || $nameRange[1] - $nameRange[0] !== 1 || $tokens[$nameRange[0]][0] !== T_CONSTANT_ENCAPSED_STRING) {
+            return;
+        }
+
+        $raw = $tokens[$nameRange[0]][1];
+        if (strlen($raw) < 2) {
+            return;
+        }
+        $normalized = ConsoleCommandDefinition::normalizeOptionName(substr($raw, 1, -1));
+        if ($normalized === null) {
+            return;
+        }
+
+        $options[$normalized] = true;
+
+        if ($modeRange !== null) {
+            for ($i = $modeRange[0]; $i < $modeRange[1]; ++$i) {
+                if ($tokens[$i][0] === T_STRING && strtolower($tokens[$i][1]) === 'value_negatable') {
+                    $options['no-' . $normalized] = true;
+                    break;
+                }
+                if ($tokens[$i][0] === T_LNUMBER) {
+                    $parsedMode = ConsoleCommandDefinition::parseIntegerLiteral($tokens[$i][1]);
+                    if ($parsedMode !== null && ($parsedMode & ConsoleCommandDefinition::OPT_VALUE_NEGATABLE) !== 0) {
+                        $options['no-' . $normalized] = true;
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    private function resolveReadableFile(string $file, string $analysisFile): ?string
+    {
+        if ($file === '') {
+            return null;
+        }
+        if (is_file($file)) {
+            return $file;
+        }
+        if ($file[0] !== '/') {
+            $pwd = getenv('PWD');
+            if (is_string($pwd) && $pwd !== '' && is_file($pwd . '/' . $file)) {
+                return $pwd . '/' . $file;
+            }
+            if ($analysisFile !== '') {
+                $dir = dirname($analysisFile);
+                for ($depth = 0; $depth < 8; ++$depth) {
+                    $candidate = $dir . '/' . $file;
+                    if (is_file($candidate)) {
+                        return $candidate;
+                    }
+                    $parent = dirname($dir);
+                    if ($parent === $dir) {
+                        break;
+                    }
+                    $dir = $parent;
+                }
+            }
+        }
+
+        return null;
     }
 
     private function isInputReceiver(NodeAnalysisContext $context, Node $receiver): bool

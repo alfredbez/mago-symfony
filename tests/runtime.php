@@ -436,4 +436,208 @@ try {
 } catch (\Symfony\Component\Console\Exception\InvalidArgumentException) {
 }
 
+foreach ([-1, 0, 8] as $badArgMode) {
+    try {
+        new \Symfony\Component\Console\Input\InputArgument('bad', $badArgMode);
+        throw new RuntimeException("Argument mode {$badArgMode} must throw InvalidArgumentException");
+    } catch (\Symfony\Component\Console\Exception\InvalidArgumentException) {
+    }
+}
+foreach ([1, 2, 3, 4, 5, 6, 7] as $okArgMode) {
+    $arg = new \Symfony\Component\Console\Input\InputArgument('ok', $okArgMode);
+    check($arg->getName() === 'ok', "Argument mode {$okArgMode} is accepted at runtime");
+}
+
+foreach ([-1, 0, 8, 9, 18, 20, 24, 32] as $badOptMode) {
+    try {
+        new \Symfony\Component\Console\Input\InputOption('bad', null, $badOptMode);
+        throw new RuntimeException("Option mode {$badOptMode} must throw InvalidArgumentException");
+    } catch (\Symfony\Component\Console\Exception\InvalidArgumentException) {
+    }
+}
+foreach ([1, 2, 4, 10, 12, 16] as $okOptMode) {
+    $opt = new \Symfony\Component\Console\Input\InputOption('ok', null, $okOptMode);
+    check($opt->getName() === 'ok', "Option mode {$okOptMode} is accepted at runtime");
+}
+
+$singleDashOpt = new \Symfony\Component\Console\Input\InputOption('-dash', null, \Symfony\Component\Console\Input\InputOption::VALUE_NONE);
+check($singleDashOpt->getName() === '-dash', 'Single-dash option name stays literal at runtime');
+$tripleDashOpt = new \Symfony\Component\Console\Input\InputOption('---triple', null, \Symfony\Component\Console\Input\InputOption::VALUE_NONE);
+check($tripleDashOpt->getName() === '-triple', 'Triple-dash option strips only one leading double-dash');
+foreach (['', '--'] as $emptyOptName) {
+    try {
+        new \Symfony\Component\Console\Input\InputOption($emptyOptName);
+        throw new RuntimeException("Empty option name {$emptyOptName} must throw");
+    } catch (\Symfony\Component\Console\Exception\InvalidArgumentException) {
+    }
+}
+
+$singleDashApp = new \Symfony\Component\Console\Application();
+$singleDashApp->setAutoExit(false);
+$singleDashCmd = new class extends \Symfony\Component\Console\Command\Command {
+    public function __construct()
+    {
+        parent::__construct('runtime:single-dash');
+    }
+
+    protected function configure(): void
+    {
+        $this
+            ->addOption('-dash', null, \Symfony\Component\Console\Input\InputOption::VALUE_NONE)
+            ->addOption('---triple', null, \Symfony\Component\Console\Input\InputOption::VALUE_NONE)
+            ->addOption('--known', 'k', \Symfony\Component\Console\Input\InputOption::VALUE_NONE)
+            ->addOption('color', null, \Symfony\Component\Console\Input\InputOption::VALUE_NEGATABLE);
+    }
+
+    protected function execute(\Symfony\Component\Console\Input\InputInterface $input, \Symfony\Component\Console\Output\OutputInterface $output): int
+    {
+        check($input->getOption('-dash') === false, 'Exact single-dash lookup succeeds at runtime');
+        check($input->getOption('-triple') === false, 'Triple-dash normalized to single-dash succeeds at runtime');
+        check($input->getOption('known') === false, 'Double-dash normalized option succeeds at runtime');
+        check($input->getOption('no-color') === null, 'Negated form of VALUE_NEGATABLE option succeeds at runtime');
+        check($input->hasOption('-dash') === true, 'hasOption(-dash) returns true');
+        check($input->hasOption('dash') === false, 'hasOption(dash) returns false without throwing');
+        check($input->hasOption('--known') === false, 'hasOption(--known) returns false without throwing');
+        check($input->hasOption('known') === true, 'hasOption(known) returns true');
+        check($input->hasOption('unknown') === false, 'hasOption(unknown) returns false without throwing');
+        check($input->hasOption('') === false, 'hasOption("") returns false without throwing');
+
+        foreach (['dash', 'triple', '---triple', '--known', '', '--'] as $missingOpt) {
+            try {
+                $input->getOption($missingOpt);
+                throw new RuntimeException("Option lookup {$missingOpt} must throw at runtime");
+            } catch (\Symfony\Component\Console\Exception\InvalidArgumentException) {
+            }
+        }
+
+        return \Symfony\Component\Console\Command\Command::SUCCESS;
+    }
+};
+$singleDashApp->add($singleDashCmd);
+check(
+    $singleDashApp->run(new \Symfony\Component\Console\Input\ArrayInput(['command' => 'runtime:single-dash']), $bufferedOut) === \Symfony\Component\Console\Command\Command::SUCCESS,
+    'Single-dash declaration and exact lookup runtime contract passes',
+);
+
+$hasSilentOption = defined(\Symfony\Component\Console\Output\OutputInterface::class . '::VERBOSITY_SILENT');
+$plainDefaultsApp = new \Symfony\Component\Console\Application();
+$plainDefaultsApp->setAutoExit(false);
+$plainDefaultsCmd = new class($hasSilentOption) extends \Symfony\Component\Console\Command\Command {
+    public function __construct(private readonly bool $expectSilent)
+    {
+        parent::__construct('runtime:plain-defaults');
+    }
+
+    protected function execute(\Symfony\Component\Console\Input\InputInterface $input, \Symfony\Component\Console\Output\OutputInterface $output): int
+    {
+        foreach (['help', 'quiet', 'verbose', 'version', 'ansi', 'no-ansi', 'no-interaction'] as $baseOpt) {
+            check($input->hasOption($baseOpt) === true, "Plain Application defines {$baseOpt}");
+            $input->getOption($baseOpt);
+        }
+        foreach (['env', 'no-debug', 'profile'] as $fwOpt) {
+            try {
+                $input->getOption($fwOpt);
+                throw new RuntimeException("Plain Application must not define {$fwOpt}");
+            } catch (\Symfony\Component\Console\Exception\InvalidArgumentException) {
+            }
+        }
+        if ($this->expectSilent) {
+            check($input->getOption('silent') === false, 'Symfony 7.2+ Application defines silent');
+        } else {
+            try {
+                $input->getOption('silent');
+                throw new RuntimeException('Symfony 6.4 Application must not define silent');
+            } catch (\Symfony\Component\Console\Exception\InvalidArgumentException) {
+            }
+        }
+
+        return \Symfony\Component\Console\Command\Command::SUCCESS;
+    }
+};
+$plainDefaultsApp->add($plainDefaultsCmd);
+check(
+    $plainDefaultsApp->run(new \Symfony\Component\Console\Input\ArrayInput(['command' => 'runtime:plain-defaults']), $bufferedOut) === \Symfony\Component\Console\Command\Command::SUCCESS,
+    'Plain Application default option runtime contract passes',
+);
+
+$localSilentApp = new \Symfony\Component\Console\Application();
+$localSilentApp->setAutoExit(false);
+$localSilentCmd = new class extends \Symfony\Component\Console\Command\Command {
+    public function __construct()
+    {
+        parent::__construct('runtime:local-silent');
+    }
+
+    protected function configure(): void
+    {
+        $this->addOption('silent', null, \Symfony\Component\Console\Input\InputOption::VALUE_NONE);
+    }
+
+    protected function execute(\Symfony\Component\Console\Input\InputInterface $input, \Symfony\Component\Console\Output\OutputInterface $output): int
+    {
+        check($input->getOption('silent') === false, 'Command-local silent option is always readable');
+
+        return \Symfony\Component\Console\Command\Command::SUCCESS;
+    }
+};
+$localSilentApp->add($localSilentCmd);
+check(
+    $localSilentApp->run(new \Symfony\Component\Console\Input\ArrayInput(['command' => 'runtime:local-silent']), $bufferedOut) === \Symfony\Component\Console\Command\Command::SUCCESS,
+    'Command-local silent option runtime contract passes',
+);
+
+$stubKernel = new class implements \Symfony\Component\HttpKernel\KernelInterface {
+    public function registerBundles(): iterable { return []; }
+    public function registerContainerConfiguration(\Symfony\Component\Config\Loader\LoaderInterface $loader): void {}
+    public function boot(): void {}
+    public function shutdown(): void {}
+    public function getBundles(): array { return []; }
+    public function getBundle(string $name): \Symfony\Component\HttpKernel\Bundle\BundleInterface { throw new RuntimeException('unused'); }
+    public function locateResource(string $name): string { return ''; }
+    public function getEnvironment(): string { return 'test'; }
+    public function isDebug(): bool { return false; }
+    public function getProjectDir(): string { return __DIR__; }
+    public function getContainer(): \Symfony\Component\DependencyInjection\ContainerInterface { return new Container(); }
+    public function getStartTime(): float { return 0.0; }
+    public function getCacheDir(): string { return sys_get_temp_dir(); }
+    public function getBuildDir(): string { return sys_get_temp_dir(); }
+    public function getLogDir(): string { return sys_get_temp_dir(); }
+    public function getCharset(): string { return 'UTF-8'; }
+    public function handle(\Symfony\Component\HttpFoundation\Request $request, int $type = self::MAIN_REQUEST, bool $catch = true): \Symfony\Component\HttpFoundation\Response { return new \Symfony\Component\HttpFoundation\Response(); }
+};
+$fwApp = new \Symfony\Bundle\FrameworkBundle\Console\Application($stubKernel);
+$fwDef = $fwApp->getDefinition();
+check($fwDef->hasOption('env') && $fwDef->hasOption('no-debug') && $fwDef->hasOption('profile'), 'FrameworkBundle Application defines env, no-debug, and profile');
+check($fwDef->hasOption('silent') === $hasSilentOption, 'FrameworkBundle Application silent option matches Console version');
+
+require_once __DIR__ . '/fixtures/TreeBuilderReturnPaths.php';
+require_once __DIR__ . '/fixtures/TreeBuilderReturnPathsNegative.php';
+check((new \SymfonyFixture\StraightLineArrayConfig())->getConfigTreeBuilder()->getRootNode() instanceof \Symfony\Component\Config\Definition\Builder\ArrayNodeDefinition, 'Straight-line TreeBuilder returns array root');
+check((new \SymfonyFixture\BothBranchesArrayConfig(true))->getConfigTreeBuilder()->getRootNode() instanceof \Symfony\Component\Config\Definition\Builder\ArrayNodeDefinition, 'Both-branches true returns array root');
+check((new \SymfonyFixture\BothBranchesArrayConfig(false))->getConfigTreeBuilder()->getRootNode() instanceof \Symfony\Component\Config\Definition\Builder\ArrayNodeDefinition, 'Both-branches false returns array root');
+check((new \SymfonyFixture\ConditionalScalarToArrayConfig(true))->getConfigTreeBuilder()->getRootNode() instanceof \Symfony\Component\Config\Definition\Builder\ArrayNodeDefinition, 'Conditional scalar-to-array true branch returns array root');
+check((new \SymfonyFixture\ConditionalScalarToArrayConfig(false))->getConfigTreeBuilder()->getRootNode() instanceof \Symfony\Component\Config\Definition\Builder\ScalarNodeDefinition, 'Conditional scalar-to-array false branch returns scalar root');
+check((new \SymfonyFixture\LoopConditionalRebindConfig([]))->getConfigTreeBuilder()->getRootNode() instanceof \Symfony\Component\Config\Definition\Builder\ScalarNodeDefinition, 'Zero-iteration loop returns scalar root');
+check((new \SymfonyFixture\LoopConditionalRebindConfig(['x']))->getConfigTreeBuilder()->getRootNode() instanceof \Symfony\Component\Config\Definition\Builder\ArrayNodeDefinition, 'One-iteration loop returns array root');
+check((new \SymfonyFixture\TryCatchIncompleteRebindConfig(true))->getConfigTreeBuilder()->getRootNode() instanceof \Symfony\Component\Config\Definition\Builder\ScalarNodeDefinition, 'Try-catch throwing branch returns scalar root');
+check((new \SymfonyFixture\TryCatchIncompleteRebindConfig(false))->getConfigTreeBuilder()->getRootNode() instanceof \Symfony\Component\Config\Definition\Builder\ArrayNodeDefinition, 'Try-catch normal branch returns array root');
+check((new \SymfonyFixture\TryNestedIfThrowConfig(true))->getConfigTreeBuilder()->getRootNode() instanceof \Symfony\Component\Config\Definition\Builder\ScalarNodeDefinition, 'Try nested if throw branch returns scalar root');
+check((new \SymfonyFixture\TryNestedIfReturnFinallyConfig(true))->getConfigTreeBuilder()->getRootNode() instanceof \Symfony\Component\Config\Definition\Builder\ScalarNodeDefinition, 'Try nested if return finally returns scalar root');
+check((new \SymfonyFixture\TryBareBlockThrowConfig())->getConfigTreeBuilder()->getRootNode() instanceof \Symfony\Component\Config\Definition\Builder\ScalarNodeDefinition, 'Try bare block throw returns scalar root');
+check((new \SymfonyFixture\TwoHopWhileLoopConfig(2))->getConfigTreeBuilder()->getRootNode() instanceof \Symfony\Component\Config\Definition\Builder\ScalarNodeDefinition, 'Two-hop while loop returns scalar root after two iterations');
+check((new \SymfonyFixture\TwoHopForLoopConfig(2))->getConfigTreeBuilder()->getRootNode() instanceof \Symfony\Component\Config\Definition\Builder\ScalarNodeDefinition, 'Two-hop for loop returns scalar root after two iterations');
+check((new \SymfonyFixture\UnpackedArgsTreeBuilderConfig(['root', 'scalar']))->getConfigTreeBuilder()->getRootNode() instanceof \Symfony\Component\Config\Definition\Builder\ScalarNodeDefinition, 'Unpacked TreeBuilder args can return scalar root');
+check((new \SymfonyFixture\NestedAssignmentInCallArgConfig())->getConfigTreeBuilder()->getRootNode() instanceof \Symfony\Component\Config\Definition\Builder\ScalarNodeDefinition, 'Nested assignment in call argument returns scalar root');
+check((new \SymfonyFixture\DestructuringInIfConditionConfig(1))->getConfigTreeBuilder()->getRootNode() instanceof \Symfony\Component\Config\Definition\Builder\ScalarNodeDefinition, 'Destructuring in if condition returns scalar root');
+check((new \SymfonyFixture\GroupUseArrayConfig())->getConfigTreeBuilder()->getRootNode() instanceof \Symfony\Component\Config\Definition\Builder\ArrayNodeDefinition, 'Group use TreeBuilder returns array root');
+check((new \SymfonyFixture\ArrowDefaultWithDoubleArrowArrayConfig())->getConfigTreeBuilder()->getRootNode() instanceof \Symfony\Component\Config\Definition\Builder\ArrayNodeDefinition, 'Arrow function with double arrow default does not mutate outer TreeBuilder');
+check((new \SymfonyFixture\AnonymousClassPropertyArrayConfig())->getConfigTreeBuilder()->getRootNode() instanceof \Symfony\Component\Config\Definition\Builder\ArrayNodeDefinition, 'Anonymous class property does not mutate outer TreeBuilder');
+
+$parseIntMethod = new ReflectionMethod(\AlfredBez\MagoSymfony\Analyzer\Providers\ConsoleCommandDefinition::class, 'parseIntegerLiteral');
+check($parseIntMethod->invoke(null, '010') === 8, 'Legacy octal literal 010 parses as 8');
+check($parseIntMethod->invoke(null, '040') === 32, 'Legacy octal literal 040 parses as 32');
+check($parseIntMethod->invoke(null, '0o10') === 8, 'PHP 8.1 octal literal 0o10 parses as 8');
+check($parseIntMethod->invoke(null, '0O40') === 32, 'PHP 8.1 octal literal 0O40 parses as 32');
+check($parseIntMethod->invoke(null, '08') === null, 'Invalid legacy octal literal 08 returns null');
+
 fwrite(STDOUT, "Symfony runtime contracts PASS\n\n");

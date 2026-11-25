@@ -65,6 +65,13 @@ $expected = [
         'tests/fixtures/TreeBuilderScopesNegative.php' => [
             'non-existent-method' => 2,
         ],
+        'tests/fixtures/TreeBuilderReturnPaths.php' => [],
+        'tests/fixtures/TreeBuilderReturnPathsNegative.php' => $isSymfony7
+            ? [
+                'invalid-return-statement' => 14,
+                'possibly-invalid-argument' => 1,
+            ]
+            : [],
         'tests/fixtures/ConfigNodes.php' => [],
         'tests/fixtures/ConfigNodesNegative.php' => $isSymfony7
             ? [
@@ -133,6 +140,20 @@ $expected = [
             : [
                 'non-existent-method' => 2,
             ],
+        'tests/fixtures/TreeBuilderReturnPaths.php' => $isSymfony7
+            ? [
+                'invalid-return-statement' => 10,
+                'non-existent-method' => 16,
+            ]
+            : [
+                'non-existent-method' => 2,
+            ],
+        'tests/fixtures/TreeBuilderReturnPathsNegative.php' => $isSymfony7
+            ? [
+                'invalid-return-statement' => 15,
+                'possibly-invalid-argument' => 1,
+            ]
+            : [],
         'tests/fixtures/ConfigNodes.php' => $isSymfony7
             ? [
                 'non-existent-method' => 6,
@@ -314,6 +335,26 @@ $sites = [
             '20:non-existent-method',
             '32:non-existent-method',
         ],
+        'tests/fixtures/TreeBuilderReturnPaths.php' => [],
+        'tests/fixtures/TreeBuilderReturnPathsNegative.php' => $isSymfony7
+            ? [
+                '21:invalid-return-statement',
+                '36:invalid-return-statement',
+                '52:invalid-return-statement',
+                '65:invalid-return-statement',
+                '75:invalid-return-statement',
+                '96:invalid-return-statement',
+                '115:invalid-return-statement',
+                '133:invalid-return-statement',
+                '151:invalid-return-statement',
+                '171:invalid-return-statement',
+                '189:invalid-return-statement',
+                '200:possibly-invalid-argument',
+                '202:invalid-return-statement',
+                '214:invalid-return-statement',
+                '234:invalid-return-statement',
+            ]
+            : [],
         'tests/fixtures/ConfigNodes.php' => [],
         'tests/fixtures/ConfigNodesNegative.php' => [
             $isSymfony7 ? '14:method-access-on-null' : '14:possible-method-access-on-null',
@@ -562,8 +603,8 @@ $xmlExpected = [
             'possibly-null-argument' => 1,
         ],
         'tests/fixtures-xml/ConsoleCommandNegative.php' => [
-            'alfredbez/symfony/unknown-console-argument' => 9,
-            'alfredbez/symfony/unknown-console-option' => 10,
+            'alfredbez/symfony/unknown-console-argument' => 10,
+            'alfredbez/symfony/unknown-console-option' => $isSymfony7 ? 17 : 18,
         ],
         'tests/fixtures-xml/Wave4ContractsNegative.php' => [
             'invalid-return-statement' => 1,
@@ -572,12 +613,20 @@ $xmlExpected = [
             'nullable-return-statement' => 1,
         ],
         'tests/fixtures-xml/Wave5Contracts.php' => [],
-        'tests/fixtures-xml/Wave5ContractsNegative.php' => [
-            'alfredbez/symfony/invalid-console-input-definition' => 6,
-            'invalid-return-statement' => 2,
-            'non-existent-method' => 3,
-            'nullable-return-statement' => 2,
-        ],
+        'tests/fixtures-xml/Wave5ContractsNegative.php' => $isSymfony7
+            ? [
+                'alfredbez/symfony/invalid-console-input-definition' => 16,
+                'invalid-argument' => 1,
+                'invalid-return-statement' => 2,
+                'non-existent-method' => 3,
+                'nullable-return-statement' => 2,
+            ]
+            : [
+                'alfredbez/symfony/invalid-console-input-definition' => 16,
+                'invalid-return-statement' => 2,
+                'non-existent-method' => 3,
+                'nullable-return-statement' => 2,
+            ],
         'tests/fixtures-xml/Wave6ValidatorInitializer.php' => [],
         'tests/fixtures-xml/Wave6ValidatorInitializerNegative.php' => [
             'missing-constructor' => 2,
@@ -654,15 +703,26 @@ $xmlExpected = [
             'non-iterable-object-iteration' => 1,
             'possibly-null-operand' => 4,
         ],
-        'tests/fixtures-xml/Wave5ContractsNegative.php' => [
-            'invalid-iterator' => 1,
-            'invalid-return-statement' => 2,
-            'mixed-assignment' => 2,
-            'mixed-method-access' => 1,
-            'non-existent-method' => 2,
-            'non-iterable-object-iteration' => 1,
-            'nullable-return-statement' => 2,
-        ],
+        'tests/fixtures-xml/Wave5ContractsNegative.php' => $isSymfony7
+            ? [
+                'invalid-argument' => 1,
+                'invalid-iterator' => 1,
+                'invalid-return-statement' => 2,
+                'mixed-assignment' => 2,
+                'mixed-method-access' => 1,
+                'non-existent-method' => 2,
+                'non-iterable-object-iteration' => 1,
+                'nullable-return-statement' => 2,
+            ]
+            : [
+                'invalid-iterator' => 1,
+                'invalid-return-statement' => 2,
+                'mixed-assignment' => 2,
+                'mixed-method-access' => 1,
+                'non-existent-method' => 2,
+                'non-iterable-object-iteration' => 1,
+                'nullable-return-statement' => 2,
+            ],
         'tests/fixtures-xml/Wave6ValidatorInitializer.php' => $isSymfony7
             ? [
                 'missing-constructor' => 2,
@@ -721,12 +781,28 @@ $failures += assertMessageCount('xml with extension', $xmlWith, 'tests/fixtures-
 $failures += assertMessageCount('xml with extension', $xmlWith, 'tests/fixtures-xml/ConsoleCommandNegative.php', 'alfredbez/symfony/unknown-console-argument', 'missing_after_cycle', 1);
 $failures += assertMessageCount('xml with extension', $xmlWith, 'tests/fixtures-xml/ConsoleCommandNegative.php', 'alfredbez/symfony/unknown-console-argument', 'missing_after_anon', 1);
 $failures += assertMessageCount('xml with extension', $xmlWith, 'tests/fixtures-xml/ConsoleCommandNegative.php', 'alfredbez/symfony/unknown-console-argument', '`--target`', 1);
-$failures += assertMessageCount('xml with extension', $xmlWith, 'tests/fixtures-xml/ConsoleCommandNegative.php', 'alfredbez/symfony/unknown-console-option', '`--known`', 2);
+$failures += assertMessageCount('xml with extension', $xmlWith, 'tests/fixtures-xml/ConsoleCommandNegative.php', 'alfredbez/symfony/unknown-console-argument', '`arg`', 1);
+$failures += assertMessageCount('xml with extension', $xmlWith, 'tests/fixtures-xml/ConsoleCommandNegative.php', 'alfredbez/symfony/unknown-console-option', '`--known`', 3);
 $failures += assertMessageCount('xml with extension', $xmlWith, 'tests/fixtures-xml/ConsoleCommandNegative.php', 'alfredbez/symfony/unknown-console-option', '`-known`', 1);
 $failures += assertMessageCount('xml with extension', $xmlWith, 'tests/fixtures-xml/ConsoleCommandNegative.php', 'alfredbez/symfony/unknown-console-option', '`-k`', 1);
 $failures += assertMessageCount('xml with extension', $xmlWith, 'tests/fixtures-xml/ConsoleCommandNegative.php', 'alfredbez/symfony/unknown-console-option', '`--verbose`', 1);
 $failures += assertMessageCount('xml with extension', $xmlWith, 'tests/fixtures-xml/ConsoleCommandNegative.php', 'alfredbez/symfony/unknown-console-option', '`-v`', 1);
 $failures += assertMessageCount('xml with extension', $xmlWith, 'tests/fixtures-xml/ConsoleCommandNegative.php', 'alfredbez/symfony/unknown-console-option', '`unknown_plain`', 1);
+$failures += assertMessageCount('xml with extension', $xmlWith, 'tests/fixtures-xml/ConsoleCommandNegative.php', 'alfredbez/symfony/unknown-console-option', '`dash`', 1);
+$failures += assertMessageCount('xml with extension', $xmlWith, 'tests/fixtures-xml/ConsoleCommandNegative.php', 'alfredbez/symfony/unknown-console-option', '`triple`', 1);
+$failures += assertMessageCount('xml with extension', $xmlWith, 'tests/fixtures-xml/ConsoleCommandNegative.php', 'alfredbez/symfony/unknown-console-option', '`---triple`', 1);
+$failures += assertMessageCount('xml with extension', $xmlWith, 'tests/fixtures-xml/ConsoleCommandNegative.php', 'alfredbez/symfony/unknown-console-option', '``', 1);
+$failures += assertMessageCount('xml with extension', $xmlWith, 'tests/fixtures-xml/ConsoleCommandNegative.php', 'alfredbez/symfony/unknown-console-option', '`--`', 1);
+$failures += assertMessageCount('xml with extension', $xmlWith, 'tests/fixtures-xml/ConsoleCommandNegative.php', 'alfredbez/symfony/unknown-console-option', '`set-dash`', 1);
+$failures += assertMessageCount('xml with extension', $xmlWith, 'tests/fixtures-xml/ConsoleCommandNegative.php', 'alfredbez/symfony/unknown-console-option', '`silent`', $isSymfony7 ? 0 : 1);
+$failures += assertMessageCount('xml with extension', $xmlWith, 'tests/fixtures-xml/Wave5ContractsNegative.php', 'alfredbez/symfony/invalid-console-input-definition', '`arg_mode_zero`', 1);
+$failures += assertMessageCount('xml with extension', $xmlWith, 'tests/fixtures-xml/Wave5ContractsNegative.php', 'alfredbez/symfony/invalid-console-input-definition', '`arg_mode_negative`', 1);
+$failures += assertMessageCount('xml with extension', $xmlWith, 'tests/fixtures-xml/Wave5ContractsNegative.php', 'alfredbez/symfony/invalid-console-input-definition', '`arg_mode_high`', 1);
+$failures += assertMessageCount('xml with extension', $xmlWith, 'tests/fixtures-xml/Wave5ContractsNegative.php', 'alfredbez/symfony/invalid-console-input-definition', '`opt_mode_zero`', 1);
+$failures += assertMessageCount('xml with extension', $xmlWith, 'tests/fixtures-xml/Wave5ContractsNegative.php', 'alfredbez/symfony/invalid-console-input-definition', '`opt_mode_negative`', 1);
+$failures += assertMessageCount('xml with extension', $xmlWith, 'tests/fixtures-xml/Wave5ContractsNegative.php', 'alfredbez/symfony/invalid-console-input-definition', '`opt_mode_high`', 1);
+$failures += assertMessageCount('xml with extension', $xmlWith, 'tests/fixtures-xml/Wave5ContractsNegative.php', 'alfredbez/symfony/invalid-console-input-definition', '`set_bad_arg`', 1);
+$failures += assertMessageCount('xml with extension', $xmlWith, 'tests/fixtures-xml/Wave5ContractsNegative.php', 'alfredbez/symfony/invalid-console-input-definition', '`set_bad_opt`', 1);
 $failures += assertMessageCount('xml with extension', $xmlWith, 'tests/fixtures-xml/Wave4ContractsNegative.php', 'non-existent-method', 'FormErrorIterator', 1);
 $failures += assertMessageCount('xml with extension', $xmlWith, 'tests/fixtures-xml/Wave4ContractsNegative.php', 'non-existent-method', 'nonExistentMethodOnDomainEvent', 1);
 $failures += assertMessageCount('xml with extension', $xmlWith, 'tests/fixtures-xml/Wave4ContractsNegative.php', 'non-existent-method', 'anotherMissingMethod', 1);
@@ -785,6 +861,23 @@ $failures += assertHistograms('security --no-extensions', $secNoExt, [
         'possible-method-access-on-null' => 1,
     ],
 ]);
+
+$plainConsoleWith = analyze(false, 'tests/mago-console-plain.toml');
+$plainConsoleWithout = analyze(true, 'tests/mago-console-plain.toml');
+$failures += assertHistograms('plain console with extension', $plainConsoleWith, [
+    'tests/fixtures-console-plain/PlainConsoleDefaults.php' => [],
+    'tests/fixtures-console-plain/PlainConsoleDefaultsNegative.php' => [
+        'alfredbez/symfony/unknown-console-option' => $isSymfony7 ? 3 : 4,
+    ],
+]);
+$failures += assertHistograms('plain console --no-extensions', $plainConsoleWithout, [
+    'tests/fixtures-console-plain/PlainConsoleDefaults.php' => [],
+    'tests/fixtures-console-plain/PlainConsoleDefaultsNegative.php' => [],
+]);
+$failures += assertMessageCount('plain console with extension', $plainConsoleWith, 'tests/fixtures-console-plain/PlainConsoleDefaultsNegative.php', 'alfredbez/symfony/unknown-console-option', '`env`', 1);
+$failures += assertMessageCount('plain console with extension', $plainConsoleWith, 'tests/fixtures-console-plain/PlainConsoleDefaultsNegative.php', 'alfredbez/symfony/unknown-console-option', '`no-debug`', 1);
+$failures += assertMessageCount('plain console with extension', $plainConsoleWith, 'tests/fixtures-console-plain/PlainConsoleDefaultsNegative.php', 'alfredbez/symfony/unknown-console-option', '`profile`', 1);
+$failures += assertMessageCount('plain console with extension', $plainConsoleWith, 'tests/fixtures-console-plain/PlainConsoleDefaultsNegative.php', 'alfredbez/symfony/unknown-console-option', '`silent`', $isSymfony7 ? 0 : 1);
 
 if ($failures > 0) {
     fwrite(STDERR, "\n{$failures} assertion(s) failed\n");

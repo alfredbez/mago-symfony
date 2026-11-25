@@ -26,6 +26,9 @@ final class ConsoleCommandDefinition
     public const OPT_VALUE_IS_ARRAY = 8;
     public const OPT_VALUE_NEGATABLE = 16;
 
+    private const ARG_MODE_MAX = (self::ARG_IS_ARRAY << 1) - 1;
+    private const OPT_MODE_MAX = (self::OPT_VALUE_NEGATABLE << 1) - 1;
+
     private const KNOWN_SAFE_CONFIGURE_METHODS = [
         'setname' => true,
         'setdescription' => true,
@@ -66,6 +69,47 @@ final class ConsoleCommandDefinition
     public static function isKnownSafeConfigureMethod(string $methodName): bool
     {
         return isset(self::KNOWN_SAFE_CONFIGURE_METHODS[strtolower($methodName)]);
+    }
+
+    /**
+     * Mirrors Symfony InputOption::__construct() option-name normalization:
+     * only a single leading `--` prefix is stripped; single-dash names stay literal.
+     */
+    public static function normalizeOptionName(string $name): ?string
+    {
+        if (str_starts_with($name, '--')) {
+            $name = substr($name, 2);
+        }
+
+        if ($name === '' || $name === '0') {
+            return null;
+        }
+
+        return $name;
+    }
+
+    public function hasDeclaredOption(string $name): bool
+    {
+        if (isset($this->options[$name])) {
+            return true;
+        }
+
+        if (str_starts_with($name, 'no-')) {
+            $base = substr($name, 3);
+            $entry = $this->options[$base] ?? null;
+            if (
+                $entry !== null
+                && $entry['mode'] !== null
+                && $entry['mode'] >= 1
+                && $entry['mode'] <= self::OPT_MODE_MAX
+                && ($entry['mode'] & self::OPT_VALUE_NEGATABLE) === self::OPT_VALUE_NEGATABLE
+                && ($entry['mode'] & (self::OPT_VALUE_REQUIRED | self::OPT_VALUE_OPTIONAL)) === 0
+            ) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     public static function parseConfigure(SourceFile $source, Node $configure, ?FileAnalysis $analysis = null): self
@@ -117,8 +161,8 @@ final class ConsoleCommandDefinition
                 $arguments[$literal] = ['mode' => $mode, 'defaultKind' => $defaultKind];
                 self::validateArgumentDefinition($literal, $mode, $defaultKind, $call->span, $errors);
             } else {
-                $normalizedOption = ltrim($literal, '-');
-                if ($normalizedOption === '') {
+                $normalizedOption = self::normalizeOptionName($literal);
+                if ($normalizedOption === null) {
                     $complete = false;
                     continue;
                 }
@@ -201,8 +245,8 @@ final class ConsoleCommandDefinition
                 $arguments[$literal] = ['mode' => $mode, 'defaultKind' => $defaultKind];
                 self::validateArgumentDefinition($literal, $mode, $defaultKind, $inst->span, $errors);
             } else {
-                $normalized = ltrim($literal, '-');
-                if ($normalized === '') {
+                $normalized = self::normalizeOptionName($literal);
+                if ($normalized === null) {
                     $allStatic = false;
                     continue;
                 }
@@ -230,6 +274,14 @@ final class ConsoleCommandDefinition
         array &$errors,
     ): void {
         if ($mode === null) {
+            return;
+        }
+
+        if ($mode < 1 || $mode > self::ARG_MODE_MAX) {
+            $errors[] = [
+                'span' => $span,
+                'message' => "Console argument `{$name}` uses invalid mode `{$mode}`; expected a bitmask between 1 and " . self::ARG_MODE_MAX . '.',
+            ];
             return;
         }
 
@@ -263,6 +315,14 @@ final class ConsoleCommandDefinition
         array &$errors,
     ): void {
         if ($mode === null) {
+            return;
+        }
+
+        if ($mode < 1 || $mode > self::OPT_MODE_MAX) {
+            $errors[] = [
+                'span' => $span,
+                'message' => "Console option `{$name}` uses invalid mode `{$mode}`; expected a bitmask between 1 and " . self::OPT_MODE_MAX . '.',
+            ];
             return;
         }
 
@@ -353,11 +413,15 @@ final class ConsoleCommandDefinition
             if ($part === '') {
                 return null;
             }
-            if (ctype_digit($part)) {
-                $mask |= (int) $part;
+            $intLiteral = self::parseIntegerLiteral($part);
+            if ($intLiteral !== null) {
+                $mask |= $intLiteral;
                 continue;
             }
 
+            if (preg_match('/^[\\\\A-Za-z_\x80-\xff][\\\\A-Za-z0-9_\x80-\xff]*::[A-Za-z_\x80-\xff][A-Za-z0-9_\x80-\xff]*$/', $part) !== 1) {
+                return null;
+            }
             $pos = strrpos($part, '::');
             if ($pos === false) {
                 return null;
@@ -375,6 +439,31 @@ final class ConsoleCommandDefinition
         }
 
         return $mask;
+    }
+
+    public static function parseIntegerLiteral(string $part): ?int
+    {
+        $normalized = str_replace(['_', ' '], '', $part);
+        if (preg_match('/^([+-]?)(0[xX][0-9a-fA-F]+|0[bB][01]+|0[oO][0-7]+|0[0-7]+|0|[1-9]\d*)$/', $normalized, $match) !== 1) {
+            return null;
+        }
+
+        $sign = $match[1] === '-' ? -1 : 1;
+        $digits = $match[2];
+        if (str_starts_with($digits, '0x') || str_starts_with($digits, '0X')) {
+            return $sign * (int) hexdec(substr($digits, 2));
+        }
+        if (str_starts_with($digits, '0b') || str_starts_with($digits, '0B')) {
+            return $sign * (int) bindec(substr($digits, 2));
+        }
+        if (str_starts_with($digits, '0o') || str_starts_with($digits, '0O')) {
+            return $sign * (int) octdec(substr($digits, 2));
+        }
+        if (preg_match('/^0[0-7]+$/', $digits) === 1) {
+            return $sign * intval($digits, 8);
+        }
+
+        return $sign * (int) $digits;
     }
 
     private static function classifyDefault(SourceFile $source, ?Node $node): string
