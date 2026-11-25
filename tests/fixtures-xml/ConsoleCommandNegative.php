@@ -80,3 +80,205 @@ final class ArgumentOnlyCommand extends Command
             : Command::FAILURE;
     }
 }
+
+final class UnrelatedConstructorHelperCommand extends Command
+{
+    private bool $initialized = false;
+
+    public function __construct()
+    {
+        parent::__construct('demo:unrelated-helper');
+        $this->setDescription('Has an unrelated private initializer');
+        $this->markInitialized();
+    }
+
+    private function markInitialized(): void
+    {
+        $this->initialized = true;
+    }
+
+    protected function configure(): void
+    {
+        $this->addArgument('known', InputArgument::REQUIRED);
+    }
+
+    protected function execute(InputInterface $input, OutputInterface $output): int
+    {
+        return $this->initialized
+            && $input->getArgument('known') !== null
+            && $input->getArgument('missing_after_helper') !== null
+            ? Command::SUCCESS
+            : Command::FAILURE;
+    }
+}
+
+class FinalProtectedHelperCommand extends Command
+{
+    private bool $initialized = false;
+
+    public function __construct()
+    {
+        parent::__construct('demo:final-protected-helper');
+        $this->markReady();
+    }
+
+    final protected function markReady(): void
+    {
+        $this->initialized = true;
+    }
+
+    protected function configure(): void
+    {
+        $this->addArgument('known', InputArgument::REQUIRED);
+    }
+
+    protected function execute(InputInterface $input, OutputInterface $output): int
+    {
+        return $this->initialized
+            && $input->getArgument('known') !== null
+            && $input->getArgument('missing_after_final_helper') !== null
+            ? Command::SUCCESS
+            : Command::FAILURE;
+    }
+}
+
+final class ParentOnlyConstructorInvalidCommand extends Command
+{
+    public function __construct()
+    {
+        parent::__construct('demo:parent-only');
+    }
+
+    protected function configure(): void
+    {
+        $this->addArgument('known', InputArgument::REQUIRED);
+    }
+
+    protected function execute(InputInterface $input, OutputInterface $output): int
+    {
+        return $input->getArgument('known') !== null
+            && $input->getArgument('missing_parent_only') !== null
+            ? Command::SUCCESS
+            : Command::FAILURE;
+    }
+}
+
+final class CyclicConstructorHelperCommand extends Command
+{
+    private int $depth = 0;
+
+    public function __construct()
+    {
+        parent::__construct('demo:cyclic-helper');
+        $this->cycleA();
+    }
+
+    private function cycleA(): void
+    {
+        if ($this->depth < 1) {
+            $this->depth++;
+            $this->cycleB();
+        }
+    }
+
+    private function cycleB(): void
+    {
+        $this->cycleA();
+    }
+
+    protected function configure(): void
+    {
+        $this->addArgument('known', InputArgument::REQUIRED);
+    }
+
+    protected function execute(InputInterface $input, OutputInterface $output): int
+    {
+        return $input->getArgument('known') !== null
+            && $input->getArgument('missing_after_cycle') !== null
+            ? Command::SUCCESS
+            : Command::FAILURE;
+    }
+}
+
+final class NestedAnonymousClassConstructorCommand extends Command
+{
+    public function __construct()
+    {
+        parent::__construct('demo:anon-in-ctor');
+        $helper = new class {
+            public function addArgument(string $name): void {}
+
+            public function init(): void
+            {
+                $this->addArgument('ignored_anon_arg');
+            }
+        };
+        $helper->init();
+    }
+
+    protected function configure(): void
+    {
+        $this->addArgument('known', InputArgument::REQUIRED);
+    }
+
+    protected function execute(InputInterface $input, OutputInterface $output): int
+    {
+        return $input->getArgument('known') !== null
+            && $input->getArgument('missing_after_anon') !== null
+            ? Command::SUCCESS
+            : Command::FAILURE;
+    }
+}
+
+final class DashedOptionLookupCommand extends Command
+{
+    protected function configure(): void
+    {
+        $this
+            ->addArgument('target', InputArgument::REQUIRED)
+            ->addOption('--known', 'k', InputOption::VALUE_NONE);
+    }
+
+    protected function execute(InputInterface $input, OutputInterface $output): int
+    {
+        $dynamicOpt = $this->dynamicName('known');
+
+        return $input->getArgument('target') !== null
+            && $input->getArgument('--target') !== null
+            && $input->getOption('known') !== null
+            && $input->getOption($dynamicOpt) !== null
+            && $input->getOption('verbose') !== null
+            && $input->getOption('env') !== null
+            && $input->getOption('--known') !== null
+            && $input->getOption('-known') !== null
+            && $input->getOption('-k') !== null
+            && $input->getOption('--verbose') !== null
+            && $input->getOption('-v') !== null
+            && $input->getOption('unknown_plain') !== null
+            ? Command::SUCCESS
+            : Command::FAILURE;
+    }
+
+    private function dynamicName(string $name): string
+    {
+        return $name;
+    }
+}
+
+final class SetDefinitionDashedOptionLookupCommand extends Command
+{
+    protected function configure(): void
+    {
+        $this->setDefinition([
+            new InputOption('--known', 'k', InputOption::VALUE_NONE),
+        ]);
+    }
+
+    protected function execute(InputInterface $input, OutputInterface $output): int
+    {
+        return $input->getOption('known') !== null
+            && $input->getOption('--known') !== null
+            ? Command::SUCCESS
+            : Command::FAILURE;
+    }
+}

@@ -339,4 +339,101 @@ try {
 } catch (\Symfony\Component\Console\Exception\InvalidArgumentException) {
 }
 
+require_once __DIR__ . '/fixtures-xml/ConsoleCommandNegative.php';
+
+$bufferedOut = new \Symfony\Component\Console\Output\BufferedOutput();
+$transitiveCmd = new \SymfonyFixtureXml\TransitiveConstructorConfiguredCommand();
+check(
+    $transitiveCmd->run(new \Symfony\Component\Console\Input\ArrayInput(['ctor_arg' => 'ok']), $bufferedOut) === \Symfony\Component\Console\Command\Command::SUCCESS,
+    'Transitive constructor helper argument succeeds at runtime',
+);
+
+$childCustomParentCmd = new \SymfonyFixtureXml\ChildOfCustomParentConstructorCommand();
+check(
+    $childCustomParentCmd->run(new \Symfony\Component\Console\Input\ArrayInput(['parent_arg' => 'p', 'child_arg' => 'c']), $bufferedOut) === \Symfony\Component\Console\Command\Command::SUCCESS,
+    'Custom parent constructor argument and child configure argument succeed at runtime',
+);
+
+check(
+    (new \SymfonyFixtureXml\TraitSafeMethodOverrideCommand())->run(new \Symfony\Component\Console\Input\ArrayInput(['known' => 'k', 'trait_arg' => 't']), $bufferedOut) === \Symfony\Component\Console\Command\Command::SUCCESS,
+    'Trait-overridden setDescription adding constructor argument succeeds at runtime',
+);
+check(
+    (new \SymfonyFixtureXml\AnonymousClassCtorArgCommand())->run(new \Symfony\Component\Console\Input\ArrayInput(['known' => 'k', 'anon_ctor_arg' => 'a']), $bufferedOut) === \Symfony\Component\Console\Command\Command::SUCCESS,
+    'Anonymous-class constructor argument adding command argument succeeds at runtime',
+);
+check(
+    (new \SymfonyFixtureXml\ObjectStaticHelperCommand())->run(new \Symfony\Component\Console\Input\ArrayInput(['known' => 'k', 'obj_static_arg' => 'o']), $bufferedOut) === \Symfony\Component\Console\Command\Command::SUCCESS,
+    'Object-syntax static helper adding constructor argument succeeds at runtime',
+);
+check(
+    (new \SymfonyFixtureXml\FirstClassCallableHelperCommand())->run(new \Symfony\Component\Console\Input\ArrayInput(['known' => 'k', 'fcc_arg' => 'f']), $bufferedOut) === \Symfony\Component\Console\Command\Command::SUCCESS,
+    'First-class callable helper adding constructor argument succeeds at runtime',
+);
+
+foreach ([
+    'unrelated helper' => new \SymfonyFixtureXml\UnrelatedConstructorHelperCommand(),
+    'final protected helper' => new \SymfonyFixtureXml\FinalProtectedHelperCommand(),
+    'parent-only constructor' => new \SymfonyFixtureXml\ParentOnlyConstructorInvalidCommand(),
+    'cyclic helper' => new \SymfonyFixtureXml\CyclicConstructorHelperCommand(),
+    'nested anonymous class' => new \SymfonyFixtureXml\NestedAnonymousClassConstructorCommand(),
+] as $label => $invalidCtorCmd) {
+    try {
+        $invalidCtorCmd->run(new \Symfony\Component\Console\Input\ArrayInput(['known' => 'ok']), $bufferedOut);
+        throw new RuntimeException("Command with {$label} must reject undeclared argument");
+    } catch (\Symfony\Component\Console\Exception\InvalidArgumentException) {
+    }
+}
+
+$dashedApp = new \Symfony\Component\Console\Application();
+$dashedApp->setAutoExit(false);
+$dashedCmd = new class extends \Symfony\Component\Console\Command\Command {
+    public function __construct()
+    {
+        parent::__construct('runtime:dashed');
+    }
+
+    protected function configure(): void
+    {
+        $this
+            ->addArgument('target', \Symfony\Component\Console\Input\InputArgument::REQUIRED)
+            ->addOption('--known', 'k', \Symfony\Component\Console\Input\InputOption::VALUE_NONE);
+    }
+
+    protected function execute(\Symfony\Component\Console\Input\InputInterface $input, \Symfony\Component\Console\Output\OutputInterface $output): int
+    {
+        check($input->getOption('known') === true, 'Plain option lookup succeeds for --known declaration');
+        check($input->getOption('verbose') === false, 'Plain built-in verbose option lookup succeeds');
+        check($input->getArgument('target') === 't1', 'Plain argument lookup succeeds');
+
+        foreach (['--known', '-known', '-k', 'k', '--verbose', '-v', 'unknown_plain'] as $invalidOption) {
+            try {
+                $input->getOption($invalidOption);
+                throw new RuntimeException("Dashed or undeclared option lookup {$invalidOption} must throw");
+            } catch (\Symfony\Component\Console\Exception\InvalidArgumentException) {
+            }
+        }
+
+        try {
+            $input->getArgument('--target');
+            throw new RuntimeException('Dashed argument lookup --target must throw');
+        } catch (\Symfony\Component\Console\Exception\InvalidArgumentException) {
+        }
+
+        return \Symfony\Component\Console\Command\Command::SUCCESS;
+    }
+};
+$dashedApp->add($dashedCmd);
+check(
+    $dashedApp->run(new \Symfony\Component\Console\Input\ArrayInput(['command' => 'runtime:dashed', 'target' => 't1', '--known' => true]), $bufferedOut) === \Symfony\Component\Console\Command\Command::SUCCESS,
+    'Console option lookup runtime assertions pass under Application',
+);
+
+$setDefDashedCmd = new \SymfonyFixtureXml\SetDefinitionDashedOptionLookupCommand();
+try {
+    $setDefDashedCmd->run(new \Symfony\Component\Console\Input\ArrayInput(['--known' => true]), $bufferedOut);
+    throw new RuntimeException('setDefinition dashed option lookup --known must throw at runtime');
+} catch (\Symfony\Component\Console\Exception\InvalidArgumentException) {
+}
+
 fwrite(STDOUT, "Symfony runtime contracts PASS\n\n");

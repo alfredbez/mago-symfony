@@ -26,6 +26,14 @@ final class ConsoleCommandArgumentsHook implements ClassLikeAnalysisHook
     private const COMMAND = 'Symfony\\Component\\Console\\Command\\Command';
     private const INPUT_INTERFACE = 'symfony\\component\\console\\input\\inputinterface';
 
+    private const CONSTRUCTOR_INPUT_METHODS = [
+        'addargument' => true,
+        'addoption' => true,
+        'setdefinition' => true,
+        'getdefinition' => true,
+        'getnativedefinition' => true,
+    ];
+
     private const DEFAULT_APPLICATION_OPTIONS = [
         'help' => true,
         'quiet' => true,
@@ -67,17 +75,22 @@ final class ConsoleCommandArgumentsHook implements ClassLikeAnalysisHook
         $configure = null;
         $constructor = null;
         $methods = [];
+        $declaredMethods = [];
         foreach ($source->getDescendants($classNode, NodeKind::Method) as $method) {
             if ($this->isNestedClass($source, $classNode, $method)) {
                 continue;
             }
             $name = strtolower($this->methodName($source, $method) ?? '');
+            if ($name === '') {
+                continue;
+            }
+            $declaredMethods[$name] = $method;
             if ($name === 'configure') {
                 $configure = $method;
             } elseif ($name === '__construct') {
                 $constructor = $method;
                 $methods[] = $method;
-            } elseif ($name !== '') {
+            } else {
                 $methods[] = $method;
             }
         }
@@ -103,12 +116,16 @@ final class ConsoleCommandArgumentsHook implements ClassLikeAnalysisHook
             return;
         }
 
-        if ($constructor !== null && $this->constructorMayConfigureInputs($source, $constructor)) {
-            return;
-        }
-
         $className = $this->className($source, $classNode);
         $hasCustomParent = $this->hasCustomCommandParent($context, $className);
+        if ($constructor !== null) {
+            $classIsFinal = $this->hasModifier($source, $classNode, 'final');
+            $visited = ['__construct' => true];
+            if ($this->methodMayConfigureInputs($context, $source, $classNode, $constructor, $declaredMethods, $className, $classIsFinal, $hasCustomParent, $visited)) {
+                return;
+            }
+        }
+
         $checkEmptyArguments = !$hasCustomParent;
         $checkEmptyOptions = !$hasCustomParent;
         foreach ($methods as $method) {
@@ -116,15 +133,229 @@ final class ConsoleCommandArgumentsHook implements ClassLikeAnalysisHook
         }
     }
 
-    private function constructorMayConfigureInputs(SourceFile $source, Node $constructor): bool
-    {
-        foreach ($source->getDescendants($constructor, NodeKind::MethodCall) as $call) {
-            $called = strtolower(ConsoleCommandDefinition::calledMethodName($source, $call) ?? '');
-            if ($called === 'addargument' || $called === 'addoption' || $called === 'setdefinition') {
+    /**
+     * @param array<string, Node> $declaredMethods
+     * @param array<string, true> $visited
+     */
+    private function methodMayConfigureInputs(
+        NodeAnalysisContext $context,
+        SourceFile $source,
+        Node $classNode,
+        Node $method,
+        array $declaredMethods,
+        string $className,
+        bool $classIsFinal,
+        bool $hasCustomParent,
+        array &$visited,
+    ): bool {
+        foreach ([NodeKind::MethodCall, NodeKind::NullSafeMethodCall, NodeKind::MethodPartialApplication] as $callKind) {
+            foreach ($source->getDescendants($method, $callKind) as $call) {
+                if ($this->isNestedClass($source, $classNode, $call)) {
+                    continue;
+                }
+
+                $calledRaw = ConsoleCommandDefinition::calledMethodName($source, $call);
+                $called = $calledRaw !== null ? strtolower($calledRaw) : null;
+                if ($called === 'addargument' || $called === 'addoption' || $called === 'setdefinition') {
+                    return true;
+                }
+
+                $rawReceiver = $source->getChildren($call)[0] ?? null;
+                if (!$this->isThisCommandReceiver($context, $source, $rawReceiver, $className)) {
+                    continue;
+                }
+
+                if ($called === null || isset(self::CONSTRUCTOR_INPUT_METHODS[$called])) {
+                    return true;
+                }
+
+                if (isset($declaredMethods[$called])) {
+                    if ($called === 'configure') {
+                        continue;
+                    }
+                    $helper = $declaredMethods[$called];
+                    if (!$classIsFinal && !$this->isNonOverridableMethod($source, $helper)) {
+                        return true;
+                    }
+                    if (isset($visited[$called])) {
+                        continue;
+                    }
+                    $visited[$called] = true;
+                    if ($this->methodMayConfigureInputs($context, $source, $classNode, $helper, $declaredMethods, $className, $classIsFinal, $hasCustomParent, $visited)) {
+                        return true;
+                    }
+                    continue;
+                }
+
+                if ($this->isUnoverriddenSafeCommandMethod($context, $className, $called)) {
+                    continue;
+                }
+
                 return true;
             }
-            $rawRecv = ConsoleCommandDefinition::unwrap($source, $source->getChildren($call)[0] ?? null);
-            if ($rawRecv !== null && $source->getText($rawRecv) === '$this') {
+        }
+
+        foreach ([NodeKind::StaticMethodCall, NodeKind::StaticMethodPartialApplication] as $staticCallKind) {
+            foreach ($source->getDescendants($method, $staticCallKind) as $call) {
+                if ($this->isNestedClass($source, $classNode, $call)) {
+                    continue;
+                }
+
+                $targetKind = $this->staticCallTargetKind($context, $source, $call, $className);
+                if ($targetKind === 'other') {
+                    continue;
+                }
+
+                $calledRaw = ConsoleCommandDefinition::calledMethodName($source, $call);
+                $called = $calledRaw !== null ? strtolower($calledRaw) : null;
+                if ($called === null || isset(self::CONSTRUCTOR_INPUT_METHODS[$called])) {
+                    return true;
+                }
+
+                if ($targetKind === 'parent') {
+                    if (!$hasCustomParent && ($called === '__construct' || $called === 'configure' || $this->isUnoverriddenSafeCommandMethod($context, $className, $called))) {
+                        continue;
+                    }
+
+                    return true;
+                }
+
+                if (isset($declaredMethods[$called])) {
+                    if ($called === 'configure') {
+                        continue;
+                    }
+                    $helper = $declaredMethods[$called];
+                    if ($this->hasModifier($source, $helper, 'abstract')) {
+                        return true;
+                    }
+                    if ($targetKind === 'static' && !$classIsFinal && !$this->isNonOverridableMethod($source, $helper)) {
+                        return true;
+                    }
+                    if (isset($visited[$called])) {
+                        continue;
+                    }
+                    $visited[$called] = true;
+                    if ($this->methodMayConfigureInputs($context, $source, $classNode, $helper, $declaredMethods, $className, $classIsFinal, $hasCustomParent, $visited)) {
+                        return true;
+                    }
+                    continue;
+                }
+
+                if ($this->isUnoverriddenSafeCommandMethod($context, $className, $called)) {
+                    continue;
+                }
+
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function isThisCommandReceiver(NodeAnalysisContext $context, SourceFile $source, ?Node $rawReceiver, string $className): bool
+    {
+        $receiver = ConsoleCommandDefinition::unwrap($source, $rawReceiver);
+        if ($receiver === null) {
+            return false;
+        }
+        if ($source->getText($receiver) === '$this') {
+            return true;
+        }
+        if ($receiver->kind === NodeKind::MethodCall || $receiver->kind === NodeKind::NullSafeMethodCall) {
+            $innerMethod = ConsoleCommandDefinition::calledMethodName($source, $receiver);
+            if ($innerMethod !== null && ConsoleCommandDefinition::isKnownSafeConfigureMethod($innerMethod)) {
+                return $this->isThisCommandReceiver($context, $source, $source->getChildren($receiver)[0] ?? null, $className);
+            }
+        }
+
+        $targetLower = strtolower(ltrim($className, '\\'));
+        foreach ([$rawReceiver, $receiver] as $candidate) {
+            if ($candidate === null) {
+                continue;
+            }
+            $type = $context->analysis->getExpressionType($candidate);
+            if ($type === null) {
+                continue;
+            }
+            foreach ($type->atomicTypes as $atomic) {
+                if (!property_exists($atomic, 'name') || !is_string($atomic->name)) {
+                    continue;
+                }
+                if (strtolower(ltrim($atomic->name, '\\')) === $targetLower) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    private function isUnoverriddenSafeCommandMethod(NodeAnalysisContext $context, string $className, string $calledLower): bool
+    {
+        if (!ConsoleCommandDefinition::isKnownSafeConfigureMethod($calledLower)) {
+            return false;
+        }
+
+        $declaring = $context->codebase->getDeclaringMethod($className, $calledLower);
+        if ($declaring === null || $declaring->identifier->class === null) {
+            return false;
+        }
+
+        return strtolower(ltrim($declaring->identifier->class, '\\')) === strtolower(self::COMMAND);
+    }
+
+    private function staticCallTargetKind(NodeAnalysisContext $context, SourceFile $source, Node $call, string $className): string
+    {
+        $rawTarget = $source->getChildren($call)[0] ?? null;
+        $target = ConsoleCommandDefinition::unwrap($source, $rawTarget);
+        if ($target === null) {
+            return 'other';
+        }
+
+        $text = strtolower(trim($source->getText($target)));
+        if ($text === 'parent' || $text === 'self' || $text === 'static') {
+            return $text;
+        }
+
+        if ($this->isThisCommandReceiver($context, $source, $rawTarget, $className)) {
+            return 'static';
+        }
+
+        if (
+            $target->kind === NodeKind::Identifier
+            || $target->kind === NodeKind::LocalIdentifier
+            || $target->kind === NodeKind::QualifiedIdentifier
+            || $target->kind === NodeKind::FullyQualifiedIdentifier
+        ) {
+            $resolved = $source->getResolvedName($target)?->name;
+            $name = strtolower(ltrim($resolved ?? $source->getText($target), '\\'));
+            if ($name === strtolower(ltrim($className, '\\'))) {
+                return 'self';
+            }
+        }
+
+        return 'other';
+    }
+
+    private function hasModifier(SourceFile $source, Node $node, string $modifier): bool
+    {
+        foreach ($source->getChildren($node) as $child) {
+            if ($child->kind === NodeKind::Modifier && strtolower(trim($source->getText($child))) === $modifier) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function isNonOverridableMethod(SourceFile $source, Node $method): bool
+    {
+        foreach ($source->getChildren($method) as $child) {
+            if ($child->kind !== NodeKind::Modifier) {
+                continue;
+            }
+            $mod = strtolower(trim($source->getText($child)));
+            if ($mod === 'private' || $mod === 'final') {
                 return true;
             }
         }
@@ -182,11 +413,12 @@ final class ConsoleCommandArgumentsHook implements ClassLikeAnalysisHook
                         new SourceLocation($context->analysis->file, $argNode->span),
                     ),
                 );
-            } elseif ($called === 'getoption' && ($definition->options !== [] || $checkEmptyOptions) && !isset($definition->options[$name])) {
-                $normalizedLookup = ltrim($name, '-');
-                if (isset($definition->options[$normalizedLookup]) || isset(self::DEFAULT_APPLICATION_OPTIONS[$normalizedLookup])) {
-                    continue;
-                }
+            } elseif (
+                $called === 'getoption'
+                && ($definition->options !== [] || $checkEmptyOptions)
+                && !isset($definition->options[$name])
+                && !isset(self::DEFAULT_APPLICATION_OPTIONS[$name])
+            ) {
                 $context->report(
                     Level::Error,
                     'unknown-console-option',
@@ -226,10 +458,17 @@ final class ConsoleCommandArgumentsHook implements ClassLikeAnalysisHook
 
     private function isNestedClass(SourceFile $source, Node $classNode, Node $node): bool
     {
+        $insideMember = $node->kind === NodeKind::ClassLikeMember;
         $parent = $source->getParent($node);
         while ($parent !== null && $parent->id !== $classNode->id) {
-            if ($parent->kind === NodeKind::Class_ || $parent->kind === NodeKind::AnonymousClass) {
+            if ($parent->kind === NodeKind::Class_) {
                 return true;
+            }
+            if ($parent->kind === NodeKind::AnonymousClass && $insideMember) {
+                return true;
+            }
+            if ($parent->kind === NodeKind::ClassLikeMember) {
+                $insideMember = true;
             }
             $parent = $source->getParent($parent);
         }

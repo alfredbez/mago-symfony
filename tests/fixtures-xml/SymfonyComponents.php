@@ -128,6 +128,250 @@ final class ConstructorConfiguredCommand extends Command
     }
 }
 
+final class TransitiveConstructorConfiguredCommand extends Command
+{
+    public function __construct()
+    {
+        parent::__construct('demo:transitive');
+        $this->registerInputs();
+    }
+
+    private function registerInputs(): void
+    {
+        $this->addArgument('ctor_arg', InputArgument::REQUIRED);
+    }
+
+    protected function configure(): void
+    {
+        $this->addOption('dry-run', null, InputOption::VALUE_NONE);
+    }
+
+    protected function execute(InputInterface $input, OutputInterface $output): int
+    {
+        return $input->getArgument('ctor_arg') !== null
+            && $input->getOption('dry-run') !== null
+            ? Command::SUCCESS
+            : Command::FAILURE;
+    }
+}
+
+class OverridableConstructorHelperCommand extends Command
+{
+    private bool $initialized = false;
+
+    public function __construct()
+    {
+        parent::__construct('demo:overridable');
+        $this->setupHook();
+    }
+
+    protected function setupHook(): void
+    {
+        $this->initialized = true;
+    }
+
+    protected function configure(): void
+    {
+        $this->addArgument('known', InputArgument::REQUIRED);
+    }
+
+    protected function execute(InputInterface $input, OutputInterface $output): int
+    {
+        return $this->initialized
+            && $input->getArgument('known') !== null
+            && $input->getArgument('subclass_arg') !== null
+            ? Command::SUCCESS
+            : Command::FAILURE;
+    }
+}
+
+class CustomParentConstructorCommand extends Command
+{
+    public function __construct(?string $name = null)
+    {
+        parent::__construct($name);
+        $this->addArgument('parent_arg', InputArgument::REQUIRED);
+    }
+}
+
+final class ChildOfCustomParentConstructorCommand extends CustomParentConstructorCommand
+{
+    public function __construct()
+    {
+        parent::__construct('demo:child-custom-parent');
+    }
+
+    protected function configure(): void
+    {
+        $this->addArgument('child_arg', InputArgument::REQUIRED);
+    }
+
+    protected function execute(InputInterface $input, OutputInterface $output): int
+    {
+        return $input->getArgument('parent_arg') !== null
+            && $input->getArgument('child_arg') !== null
+            ? Command::SUCCESS
+            : Command::FAILURE;
+    }
+}
+
+final class DynamicAndBuiltinOptionsCommand extends Command
+{
+    protected function configure(): void
+    {
+        $this
+            ->addArgument('target', InputArgument::REQUIRED)
+            ->addOption('--known', 'k', InputOption::VALUE_NONE);
+    }
+
+    protected function execute(InputInterface $input, OutputInterface $output): int
+    {
+        $dynamicArg = $this->dynamicName('target');
+        $dynamicOpt = $this->dynamicName('known');
+
+        return $input->getArgument('target') !== null
+            && $input->getArgument($dynamicArg) !== null
+            && $input->getOption('known') !== null
+            && $input->getOption($dynamicOpt) !== null
+            && $input->getOption('verbose') !== null
+            && $input->getOption('env') !== null
+            && $input->getOption('no-debug') !== null
+            && $input->getOption('no-ansi') !== null
+            ? Command::SUCCESS
+            : Command::FAILURE;
+    }
+
+    private function dynamicName(string $name): string
+    {
+        return $name;
+    }
+}
+
+/** @require-extends Command */
+trait DescriptionWithInputOverrideTrait
+{
+    public function setDescription(string $description): static
+    {
+        if (!$this->getDefinition()->hasArgument('trait_arg')) {
+            $this->addArgument('trait_arg', InputArgument::REQUIRED);
+        }
+
+        return parent::setDescription($description);
+    }
+}
+
+final class TraitSafeMethodOverrideCommand extends Command
+{
+    use DescriptionWithInputOverrideTrait;
+
+    public function __construct()
+    {
+        parent::__construct('demo:trait-override');
+        $this->setDescription('register');
+    }
+
+    protected function configure(): void
+    {
+        $this->addArgument('known', InputArgument::REQUIRED);
+    }
+
+    protected function execute(InputInterface $input, OutputInterface $output): int
+    {
+        return $input->getArgument('known') !== null && $input->getArgument('trait_arg') !== null
+            ? Command::SUCCESS
+            : Command::FAILURE;
+    }
+}
+
+final class AnonymousClassCtorArgCommand extends Command
+{
+    public function __construct()
+    {
+        parent::__construct('demo:anon-arg');
+        $wrapper = new class($this->addArgument('anon_ctor_arg', InputArgument::REQUIRED)) {
+            public function __construct(public readonly Command $command)
+            {
+            }
+        };
+        unset($wrapper);
+    }
+
+    protected function configure(): void
+    {
+        $this->addArgument('known', InputArgument::REQUIRED);
+    }
+
+    protected function execute(InputInterface $input, OutputInterface $output): int
+    {
+        return $input->getArgument('known') !== null && $input->getArgument('anon_ctor_arg') !== null
+            ? Command::SUCCESS
+            : Command::FAILURE;
+    }
+}
+
+final class ObjectStaticHelperCommand extends Command
+{
+    public function __construct()
+    {
+        parent::__construct('demo:obj-static-helper');
+        $this->bootInputs();
+    }
+
+    private function bootInputs(): void
+    {
+        $this::registerInputs($this);
+    }
+
+    private static function registerInputs(self $command): void
+    {
+        $command->addArgument('obj_static_arg', InputArgument::REQUIRED);
+    }
+
+    protected function configure(): void
+    {
+        $this->addArgument('known', InputArgument::REQUIRED);
+    }
+
+    protected function execute(InputInterface $input, OutputInterface $output): int
+    {
+        return $input->getArgument('known') !== null && $input->getArgument('obj_static_arg') !== null
+            ? Command::SUCCESS
+            : Command::FAILURE;
+    }
+}
+
+final class FirstClassCallableHelperCommand extends Command
+{
+    public function __construct()
+    {
+        parent::__construct('demo:fcc-helper');
+        $this->bootInputs();
+    }
+
+    private function bootInputs(): void
+    {
+        $register = $this->registerInputs(...);
+        $register();
+    }
+
+    private function registerInputs(): void
+    {
+        $this->addArgument('fcc_arg', InputArgument::REQUIRED);
+    }
+
+    protected function configure(): void
+    {
+        $this->addArgument('known', InputArgument::REQUIRED);
+    }
+
+    protected function execute(InputInterface $input, OutputInterface $output): int
+    {
+        return $input->getArgument('known') !== null && $input->getArgument('fcc_arg') !== null
+            ? Command::SUCCESS
+            : Command::FAILURE;
+    }
+}
+
 final class SymfonyComponentsController extends AbstractController
 {
     public function exercise(

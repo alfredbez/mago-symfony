@@ -63,6 +63,11 @@ final class ConsoleCommandDefinition
         public readonly array $definitionErrors,
     ) {}
 
+    public static function isKnownSafeConfigureMethod(string $methodName): bool
+    {
+        return isset(self::KNOWN_SAFE_CONFIGURE_METHODS[strtolower($methodName)]);
+    }
+
     public static function parseConfigure(SourceFile $source, Node $configure, ?FileAnalysis $analysis = null): self
     {
         $arguments = [];
