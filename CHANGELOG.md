@@ -6,6 +6,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-11-25
+
+### Fixed
+
+- Console command validation inspects non-overridable local constructor helpers recursively instead of skipping validation whenever `__construct()` calls any method on `$this`, while preserving conservative skips for constructor-configured inputs, custom parents, trait overrides, anonymous-class constructor arguments, and overridable or unresolved helpers.
+- `$input->getOption()` validates exact runtime option keys instead of stripping leading dashes, reporting dashed lookups such as `--known` and `--verbose` while keeping normalized `addOption()` and `InputOption` declarations working with plain lookup keys.
+
 ## [0.1.1] - 2026-11-24
 
 ### Fixed
