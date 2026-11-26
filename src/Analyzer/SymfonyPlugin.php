@@ -17,6 +17,7 @@ use AlfredBez\MagoSymfony\Analyzer\Providers\ParameterReturnTypeProvider;
 use AlfredBez\MagoSymfony\Analyzer\Providers\RequestFormatReturnTypeProvider;
 use AlfredBez\MagoSymfony\Analyzer\Providers\RequestPreferredLanguageReturnTypeProvider;
 use AlfredBez\MagoSymfony\Analyzer\Providers\RequiredInitializerProvider;
+use AlfredBez\MagoSymfony\Analyzer\Providers\RequiredPropertyInitializationProvider;
 use AlfredBez\MagoSymfony\Analyzer\Providers\ResponseHeaderBagCookiesReturnTypeProvider;
 use AlfredBez\MagoSymfony\Analyzer\Providers\SecurityUserReturnTypeProvider;
 use AlfredBez\MagoSymfony\Analyzer\Providers\SerializerReturnTypeProvider;
@@ -25,6 +26,8 @@ use AlfredBez\MagoSymfony\Analyzer\Providers\TreeBuilderReturnIssueFilter;
 use AlfredBez\MagoSymfony\Analyzer\Providers\TreeBuilderRootNodeHook;
 use AlfredBez\MagoSymfony\Analyzer\Providers\TreeBuilderRootNodeIndex;
 use AlfredBez\MagoSymfony\Analyzer\Providers\WrappedExceptionsReturnTypeProvider;
+use Mago\Sdk\Analyzer\ClassTarget;
+use Mago\Sdk\Analyzer\MethodTarget;
 use Mago\Sdk\Analyzer\Plugin;
 use Mago\Sdk\Analyzer\PluginDefinition;
 use Mago\Sdk\Analyzer\PluginRegistry;
@@ -68,6 +71,8 @@ final class SymfonyPlugin implements Plugin
             $registry->registerMethodReturnTypeProvider(new SecurityUserReturnTypeProvider($userClass));
         }
         $registry->registerClassInitializerProvider(new RequiredInitializerProvider());
+        $registry->registerPropertyInitializationProvider(new RequiredPropertyInitializationProvider());
+        self::registerEntryPoints($registry);
         $registry->registerMethodCallAnalysisHook(new TreeBuilderRootNodeHook($this->rootNodeIndex));
         if ($container->isXmlLoaded()) {
             $registry->registerMethodCallAnalysisHook(
@@ -79,5 +84,42 @@ final class SymfonyPlugin implements Plugin
         }
         $registry->registerClassLikeAnalysisHook(new ConsoleCommandArgumentsHook());
         $registry->registerIssueFilterHook(new TreeBuilderReturnIssueFilter());
+    }
+
+    private static function registerEntryPoints(PluginRegistry $registry): void
+    {
+        $anyClass = ClassTarget::any();
+        foreach ([
+            'Symfony\\Component\\Routing\\Attribute\\Route',
+            'Symfony\\Component\\Routing\\Annotation\\Route',
+            'Symfony\\Component\\EventDispatcher\\Attribute\\AsEventListener',
+            'Symfony\\Component\\Messenger\\Attribute\\AsMessageHandler',
+            'Symfony\\Component\\Validator\\Constraints\\Callback',
+            'Symfony\\Contracts\\Service\\Attribute\\Required',
+        ] as $attribute) {
+            $registry->registerAttributedEntryPoint($anyClass, $attribute);
+        }
+
+        foreach ([
+            ['Symfony\\Component\\Console\\Command\\Command', 'configure'],
+            ['Symfony\\Component\\Console\\Command\\Command', 'initialize'],
+            ['Symfony\\Component\\Console\\Command\\Command', 'interact'],
+            ['Symfony\\Component\\Console\\Command\\Command', 'execute'],
+            ['Symfony\\Component\\Form\\AbstractType', 'buildForm'],
+            ['Symfony\\Component\\Form\\AbstractType', 'buildView'],
+            ['Symfony\\Component\\Form\\AbstractType', 'finishView'],
+            ['Symfony\\Component\\Form\\AbstractType', 'configureOptions'],
+            ['Symfony\\Component\\Validator\\ConstraintValidator', 'initialize'],
+            ['Symfony\\Component\\Validator\\ConstraintValidator', 'validate'],
+            ['Symfony\\Component\\Security\\Core\\Authorization\\Voter\\Voter', 'supports'],
+            ['Symfony\\Component\\Security\\Core\\Authorization\\Voter\\Voter', 'voteOnAttribute'],
+            ['Symfony\\Component\\Config\\Definition\\ConfigurationInterface', 'getConfigTreeBuilder'],
+            ['Symfony\\Component\\DependencyInjection\\Extension\\ExtensionInterface', 'load'],
+            ['Symfony\\Component\\DependencyInjection\\Compiler\\CompilerPassInterface', 'process'],
+            ['Symfony\\Component\\EventDispatcher\\EventSubscriberInterface', 'getSubscribedEvents'],
+            ['Symfony\\Contracts\\Service\\ServiceSubscriberInterface', 'getSubscribedServices'],
+        ] as [$class, $method]) {
+            $registry->registerEntryPoint(MethodTarget::exact($class, $method));
+        }
     }
 }

@@ -1,0 +1,28 @@
+version = "1"
+php-version = "8.3"
+
+[source]
+paths = ["tests/fixtures-lifecycle"]
+includes = [
+    "vendor/symfony/config",
+    "vendor/symfony/console",
+    "vendor/symfony/dependency-injection",
+    "vendor/symfony/event-dispatcher",
+    "vendor/symfony/form",
+    "vendor/symfony/http-foundation",
+    "vendor/symfony/messenger",
+    "vendor/symfony/options-resolver",
+    "vendor/symfony/routing",
+    "vendor/symfony/security-core",
+    "vendor/symfony/service-contracts",
+    "vendor/symfony/validator",
+]
+
+[analyzer]
+find-unused-definitions = true
+find-unused-expressions = false
+check-property-initialization = true
+
+[extension-hosts.symfony]
+command = ["php", "../bin/mago-symfony-worker"]
+workers = 1

@@ -10,16 +10,19 @@ use Mago\Sdk\Analyzer\ClassTarget;
 
 /**
  * Recognizes Symfony lifecycle initializers (AbstractController::setContainer,
- * ConstraintValidator::initialize, InputAwareHelper::setInput) and methods
- * marked with #[Symfony\Contracts\Service\Attribute\Required].
+ * Command::initialize, ConstraintValidator::initialize, InputAwareHelper::setInput)
+ * and methods marked with #[Symfony\Contracts\Service\Attribute\Required].
+ *
+ * @internal
  */
 final class RequiredInitializerProvider implements ClassInitializerProvider
 {
     private const REQUIRED_ATTRIBUTE = 'Symfony\\Contracts\\Service\\Attribute\\Required';
 
-    /** @var array<string, string> */
+    /** @var array<non-empty-string, non-empty-string> */
     private const CLASS_INITIALIZERS = [
         'symfony\\bundle\\frameworkbundle\\controller\\abstractcontroller' => 'setContainer',
+        'symfony\\component\\console\\command\\command' => 'initialize',
         'symfony\\component\\validator\\constraintvalidator' => 'initialize',
         'symfony\\component\\console\\helper\\inputawarehelper' => 'setInput',
     ];
@@ -37,6 +40,7 @@ final class RequiredInitializerProvider implements ClassInitializerProvider
             return [];
         }
 
+        /** @var list<non-empty-string> $initializers */
         $initializers = [];
         $className = $context->class->name;
 
@@ -58,7 +62,10 @@ final class RequiredInitializerProvider implements ClassInitializerProvider
             fields: 0,
         );
         foreach ($requiredMethods as $method) {
-            $initializers[] = $method->method->member;
+            $member = $method->method->member;
+            if ($member !== '') {
+                $initializers[] = $member;
+            }
         }
 
         return array_values(array_unique($initializers));

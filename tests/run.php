@@ -967,6 +967,33 @@ if ($arrayNodeHasTemplates) {
     ]);
 }
 
+$lifecycleWith = analyze(false, 'tests/mago-lifecycle.toml');
+$lifecycleWithout = analyze(true, 'tests/mago-lifecycle.toml');
+$failures += assertHistograms('lifecycle with extension', $lifecycleWith, [
+    'tests/fixtures-lifecycle/LifecycleAndEntryPoints.php' => [],
+    'tests/fixtures-lifecycle/LifecycleAndEntryPointsNegative.php' => [
+        'uninitialized-property' => 4,
+        'unused-method' => 1,
+    ],
+]);
+$failures += assertHistograms('lifecycle --no-extensions', $lifecycleWithout, [
+    'tests/fixtures-lifecycle/LifecycleAndEntryPoints.php' => [
+        'invalid-return-statement' => $isSymfony7 ? 1 : 0,
+        'missing-constructor' => 2,
+        'uninitialized-property' => 1,
+        'unused-method' => 5,
+    ],
+    'tests/fixtures-lifecycle/LifecycleAndEntryPointsNegative.php' => [
+        'uninitialized-property' => 4,
+        'unused-method' => 1,
+    ],
+]);
+$failures += assertMessageCount('lifecycle with extension', $lifecycleWith, 'tests/fixtures-lifecycle/LifecycleAndEntryPointsNegative.php', 'uninitialized-property', '$privateRequired', 1);
+$failures += assertMessageCount('lifecycle with extension', $lifecycleWith, 'tests/fixtures-lifecycle/LifecycleAndEntryPointsNegative.php', 'uninitialized-property', '$protectedRequired', 1);
+$failures += assertMessageCount('lifecycle with extension', $lifecycleWith, 'tests/fixtures-lifecycle/LifecycleAndEntryPointsNegative.php', 'uninitialized-property', '$readonlyRequired', 1);
+$failures += assertMessageCount('lifecycle with extension', $lifecycleWith, 'tests/fixtures-lifecycle/LifecycleAndEntryPointsNegative.php', 'uninitialized-property', '$plainPublic', 1);
+$failures += assertMessageCount('lifecycle with extension', $lifecycleWith, 'tests/fixtures-lifecycle/LifecycleAndEntryPointsNegative.php', 'unused-method', 'genuinelyUnusedHelper', 1);
+
 $failures += verifyConfigErrorBehavior($magoCommand);
 
 if ($failures > 0) {
