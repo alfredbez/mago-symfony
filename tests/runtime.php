@@ -147,6 +147,13 @@ $serializer = new \Symfony\Component\Serializer\Serializer(
 $deserializedEvent = $serializer->deserialize('{"name":"wave5"}', \SymfonyFixtureXml\DomainEvent::class, 'json');
 check($deserializedEvent instanceof \SymfonyFixtureXml\DomainEvent && $deserializedEvent->name === 'wave5', 'Serializer::deserialize hydrates DomainEvent');
 
+/** @var class-string<\SymfonyFixtureXml\DomainEvent> $dynamicEventClass */
+$dynamicEventClass = \SymfonyFixtureXml\DomainEvent::class;
+$deserializedDynamic = $serializer->deserialize('{"name":"dynamic"}', $dynamicEventClass, 'json');
+check($deserializedDynamic instanceof \SymfonyFixtureXml\DomainEvent && $deserializedDynamic->name === 'dynamic', 'Serializer::deserialize hydrates class-string<DomainEvent>');
+$denormalizedDynamic = $serializer->denormalize(['name' => 'dynamic-denorm'], $dynamicEventClass);
+check($denormalizedDynamic instanceof \SymfonyFixtureXml\DomainEvent && $denormalizedDynamic->name === 'dynamic-denorm', 'Denormalizer::denormalize hydrates class-string<DomainEvent>');
+
 $deserializedList = $serializer->deserialize('[{"name":"a"},{"name":"b"}]', \SymfonyFixtureXml\DomainEvent::class . '[]', 'json');
 check(
     is_array($deserializedList)
@@ -259,6 +266,8 @@ check($inputHelper->rawInput() === $arrayInput, 'InputAwareHelper::setInput wire
 require_once __DIR__ . '/fixtures-xml/Wave6Contracts.php';
 $langReq = new \Symfony\Component\HttpFoundation\Request();
 check($langReq->getPreferredLanguage(['en', 'de']) === 'en', 'Request::getPreferredLanguage returns first locale string for non-empty list');
+check($langReq->getPreferredLanguage([0 => 'en', 'fallback' => 'de']) === 'en', 'Request::getPreferredLanguage returns key 0 locale for mixed keyed array');
+check(@$langReq->getPreferredLanguage([1 => 'en', 'fallback' => 'de']) === null, 'Request::getPreferredLanguage returns null when key 0 is missing');
 check($langReq->getPreferredLanguage([]) === null, 'Request::getPreferredLanguage returns null for empty list without Accept-Language');
 check(@$langReq->getPreferredLanguage(['a' => 'en', 'b' => 'de']) === null, 'Request::getPreferredLanguage returns null for associative non-0-indexed array');
 

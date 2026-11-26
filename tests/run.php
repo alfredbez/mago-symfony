@@ -632,6 +632,13 @@ $xmlExpected = [
             'missing-constructor' => 2,
         ],
         'tests/fixtures-xml/Wave6Contracts.php' => [],
+        'tests/fixtures-xml/SerializerClassStringAndPreferredLanguage.php' => [],
+        'tests/fixtures-xml/SerializerClassStringAndPreferredLanguageNegative.php' => [
+            'ambiguous-object-method-access' => $serializerHasTemplates ? 1 : 0,
+            'mixed-method-access' => $serializerHasTemplates ? 0 : 1,
+            'non-existent-method' => 2,
+            'possibly-null-operand' => 3,
+        ],
         'tests/fixtures-xml/Wave6ContractsNegative.php' => $isSymfony7
             ? [
                 'invalid-argument' => 1,
@@ -746,6 +753,18 @@ $xmlExpected = [
                 'possibly-null-operand' => 6,
                 'possibly-null-property-access' => 3,
             ],
+        'tests/fixtures-xml/SerializerClassStringAndPreferredLanguage.php' => [
+            'mixed-assignment' => ($serializerHasTemplates ? 0 : 2) + ($denormalizerHasTemplates ? 0 : 2),
+            'mixed-operand' => ($serializerHasTemplates ? 0 : 2) + ($denormalizerHasTemplates ? 0 : 2),
+            'mixed-property-access' => ($serializerHasTemplates ? 0 : 2) + ($denormalizerHasTemplates ? 0 : 2),
+            'possibly-null-operand' => 2,
+        ],
+        'tests/fixtures-xml/SerializerClassStringAndPreferredLanguageNegative.php' => [
+            'ambiguous-object-method-access' => $serializerHasTemplates ? 1 : 0,
+            'mixed-method-access' => ($serializerHasTemplates ? 0 : 2) + ($denormalizerHasTemplates ? 0 : 1),
+            'non-existent-method' => ($serializerHasTemplates ? 1 : 0) + ($denormalizerHasTemplates ? 1 : 0),
+            'possibly-null-operand' => 3,
+        ],
         'tests/fixtures-xml/Wave6ContractsNegative.php' => $isSymfony7
             ? [
                 'invalid-argument' => 1,
@@ -878,6 +897,28 @@ $failures += assertMessageCount('plain console with extension', $plainConsoleWit
 $failures += assertMessageCount('plain console with extension', $plainConsoleWith, 'tests/fixtures-console-plain/PlainConsoleDefaultsNegative.php', 'alfredbez/symfony/unknown-console-option', '`no-debug`', 1);
 $failures += assertMessageCount('plain console with extension', $plainConsoleWith, 'tests/fixtures-console-plain/PlainConsoleDefaultsNegative.php', 'alfredbez/symfony/unknown-console-option', '`profile`', 1);
 $failures += assertMessageCount('plain console with extension', $plainConsoleWith, 'tests/fixtures-console-plain/PlainConsoleDefaultsNegative.php', 'alfredbez/symfony/unknown-console-option', '`silent`', $isSymfony7 ? 0 : 1);
+
+$serializerUntemplatedWith = analyze(false, 'tests/mago-serializer-untemplated.toml');
+$serializerUntemplatedWithout = analyze(true, 'tests/mago-serializer-untemplated.toml');
+$failures += assertHistograms('serializer untemplated with extension', $serializerUntemplatedWith, [
+    'tests/fixtures-serializer-untemplated/SerializerClassStringUsage.php' => [],
+    'tests/fixtures-serializer-untemplated/SerializerClassStringNegative.php' => [
+        'mixed-method-access' => 1,
+        'non-existent-method' => 2,
+    ],
+]);
+$failures += assertHistograms('serializer untemplated --no-extensions', $serializerUntemplatedWithout, [
+    'tests/fixtures-serializer-untemplated/SerializerClassStringUsage.php' => [
+        'mixed-assignment' => 2,
+        'mixed-operand' => 2,
+        'mixed-property-access' => 2,
+    ],
+    'tests/fixtures-serializer-untemplated/SerializerClassStringNegative.php' => [
+        'mixed-method-access' => 3,
+    ],
+]);
+$failures += assertMessageCount('serializer untemplated with extension', $serializerUntemplatedWith, 'tests/fixtures-serializer-untemplated/SerializerClassStringNegative.php', 'non-existent-method', 'missingOnDeserialized', 1);
+$failures += assertMessageCount('serializer untemplated with extension', $serializerUntemplatedWith, 'tests/fixtures-serializer-untemplated/SerializerClassStringNegative.php', 'non-existent-method', 'missingOnDenormalized', 1);
 
 if ($failures > 0) {
     fwrite(STDERR, "\n{$failures} assertion(s) failed\n");

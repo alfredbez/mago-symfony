@@ -36,7 +36,7 @@ final class RequestPreferredLanguageReturnTypeProvider implements MethodReturnTy
         }
 
         $localesType = $context->invocation->getArgument(0, 'locales')?->type;
-        if (!$localesType instanceof Type || $localesType->atomicTypes === []) {
+        if (!$localesType instanceof Type) {
             return null;
         }
 
@@ -97,7 +97,7 @@ final class RequestPreferredLanguageReturnTypeProvider implements MethodReturnTy
             if (!self::isPureStringType($item->type)) {
                 return false;
             }
-            if (!$item->optional && $item->key->kind === ArrayKeyKind::Integer && $item->key->integerValue === 0) {
+            if (!$item->optional && $item->key->kind === ArrayKeyKind::Integer && $item->key->value === 0) {
                 $hasZeroKey = true;
             }
         }
@@ -115,10 +115,6 @@ final class RequestPreferredLanguageReturnTypeProvider implements MethodReturnTy
 
     private static function isPureStringType(Type $type): bool
     {
-        if ($type->atomicTypes === []) {
-            return false;
-        }
-
         foreach ($type->atomicTypes as $atomic) {
             if (!$atomic instanceof ScalarType || $atomic->kind !== ScalarTypeKind::String) {
                 return false;

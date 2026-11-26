@@ -9,6 +9,7 @@ use Mago\Sdk\Analyzer\MethodReturnTypeProvider;
 use Mago\Sdk\Analyzer\MethodTarget;
 use Mago\Sdk\Analyzer\ReturnTypeProviderContext;
 use Mago\Sdk\Analyzer\Type;
+use Mago\Sdk\Analyzer\Type\AtomicType;
 use Mago\Sdk\Analyzer\Type\ClassLikeStringType;
 use Mago\Sdk\Analyzer\Type\ClassLikeStringVariant;
 use Mago\Sdk\Analyzer\Type\ScalarType;
@@ -49,9 +50,9 @@ final class SerializerReturnTypeProvider implements MethodReturnTypeProvider
                 $atomic instanceof ScalarType
                 && $atomic->refinement instanceof ClassLikeStringType
                 && $atomic->refinement->variant === ClassLikeStringVariant::OfType
-                && $atomic->refinement->constraint instanceof Type
+                && $atomic->refinement->constraint instanceof AtomicType
             ) {
-                return $atomic->refinement->constraint;
+                return Type::fromAtomic($atomic->refinement->constraint);
             }
         }
 
