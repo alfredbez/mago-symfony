@@ -54,12 +54,20 @@ final class SecurityUserReturnTypeProvider implements MethodReturnTypeProvider
         }
 
         if (!$context->codebase->classOrInterfaceExists($this->userClass)) {
+            fwrite(
+                STDERR,
+                "mago-symfony: " . self::ENVIRONMENT_VARIABLE . " `{$this->userClass}` does not exist in the analyzed codebase; Security getUser() will not be narrowed.\n",
+            );
             $this->validated = true;
 
             return null;
         }
 
         if (!$this->implementsUserInterface($context)) {
+            fwrite(
+                STDERR,
+                "mago-symfony: " . self::ENVIRONMENT_VARIABLE . " `{$this->userClass}` does not implement " . self::USER_INTERFACE . "; Security getUser() will not be narrowed.\n",
+            );
             $this->validated = true;
 
             return null;

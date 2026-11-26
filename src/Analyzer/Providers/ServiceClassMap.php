@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace AlfredBez\MagoSymfony\Analyzer\Providers;
 
+use RuntimeException;
+
 /**
  * Loads container service classes, factories, and parameters from either a
  * compiled Symfony container XML dump or a JSON map.
@@ -67,12 +69,16 @@ final class ServiceClassMap
     {
         $xmlPath = getenv(self::XML_ENVIRONMENT_VARIABLE);
         if ($xmlPath !== false && $xmlPath !== '') {
-            return self::fromXmlFile($xmlPath);
+            return self::fromExplicitXmlFile($xmlPath, self::XML_ENVIRONMENT_VARIABLE);
         }
 
         $mapPath = getenv(self::ENVIRONMENT_VARIABLE);
         if ($mapPath !== false && $mapPath !== '') {
-            return self::fromFile($mapPath);
+            if (str_ends_with(strtolower($mapPath), '.xml')) {
+                return self::fromExplicitXmlFile($mapPath, self::ENVIRONMENT_VARIABLE);
+            }
+
+            return self::fromExplicitJsonFile($mapPath, self::ENVIRONMENT_VARIABLE);
         }
 
         if (is_file(self::DEFAULT_PATH) && is_readable(self::DEFAULT_PATH)) {
@@ -93,6 +99,50 @@ final class ServiceClassMap
         }
 
         return new self([]);
+    }
+
+    private static function fromExplicitXmlFile(string $path, string $envVar): self
+    {
+        $loaded = ContainerXmlLoader::loadFileOrFail($path, $envVar);
+
+        return new self(
+            $loaded['classes'],
+            $loaded['factories'],
+            $loaded['parameters'],
+            $loaded['visibility'],
+            $loaded['visibility'] !== [],
+        );
+    }
+
+    private static function fromExplicitJsonFile(string $path, string $envVar): self
+    {
+        if (!is_file($path) || !is_readable($path)) {
+            throw new RuntimeException(
+                "mago-symfony: {$envVar} points to a missing or unreadable file: {$path}",
+            );
+        }
+
+        $raw = @file_get_contents($path);
+        if ($raw === false) {
+            throw new RuntimeException(
+                "mago-symfony: {$envVar} could not be read: {$path}",
+            );
+        }
+
+        $decoded = json_decode($raw, true);
+        if (json_last_error() !== JSON_ERROR_NONE) {
+            throw new RuntimeException(
+                "mago-symfony: {$envVar} contains malformed JSON (" . json_last_error_msg() . "): {$path}",
+            );
+        }
+
+        if (!is_array($decoded) || ($decoded !== [] && array_is_list($decoded))) {
+            throw new RuntimeException(
+                "mago-symfony: {$envVar} must decode to a JSON object: {$path}",
+            );
+        }
+
+        return self::fromDecodedJson($decoded);
     }
 
     public static function fromFile(string $path): self
@@ -151,6 +201,14 @@ final class ServiceClassMap
             return new self([]);
         }
 
+        return self::fromDecodedJson($decoded);
+    }
+
+    /**
+     * @param array<array-key, mixed> $decoded
+     */
+    private static function fromDecodedJson(array $decoded): self
+    {
         $classes = [];
         $parameters = [];
 

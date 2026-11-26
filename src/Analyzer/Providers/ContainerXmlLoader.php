@@ -6,6 +6,7 @@ namespace AlfredBez\MagoSymfony\Analyzer\Providers;
 
 use DOMElement;
 use DOMText;
+use RuntimeException;
 use XMLReader;
 
 /**
@@ -32,12 +33,47 @@ final class ContainerXmlLoader
 
         $reader = new XMLReader();
         $previous = libxml_use_internal_errors(true);
+        libxml_clear_errors();
         try {
             if (!@$reader->open($path, null, LIBXML_NONET | LIBXML_COMPACT)) {
                 return ['classes' => [], 'factories' => [], 'parameters' => [], 'visibility' => []];
             }
 
-            return self::parseReader($reader);
+            return self::parseReader($reader, false);
+        } finally {
+            @$reader->close();
+            libxml_clear_errors();
+            libxml_use_internal_errors($previous);
+        }
+    }
+
+    /**
+     * @return array{
+     *     classes: array<string, string>,
+     *     factories: array<string, ServiceFactory>,
+     *     parameters: array<string, ParameterDescriptor>,
+     *     visibility: array<string, bool>,
+     * }
+     */
+    public static function loadFileOrFail(string $path, string $envVar): array
+    {
+        if (!is_file($path) || !is_readable($path)) {
+            throw new RuntimeException(
+                "mago-symfony: {$envVar} points to a missing or unreadable file: {$path}",
+            );
+        }
+
+        $reader = new XMLReader();
+        $previous = libxml_use_internal_errors(true);
+        libxml_clear_errors();
+        try {
+            if (!@$reader->open($path, null, LIBXML_NONET | LIBXML_COMPACT)) {
+                throw new RuntimeException(
+                    "mago-symfony: {$envVar} could not be opened as XML: {$path}",
+                );
+            }
+
+            return self::parseReader($reader, true, $envVar, $path);
         } finally {
             @$reader->close();
             libxml_clear_errors();
@@ -61,12 +97,13 @@ final class ContainerXmlLoader
 
         $reader = new XMLReader();
         $previous = libxml_use_internal_errors(true);
+        libxml_clear_errors();
         try {
             if (!@$reader->XML($xml, null, LIBXML_NONET | LIBXML_COMPACT)) {
                 return ['classes' => [], 'factories' => [], 'parameters' => [], 'visibility' => []];
             }
 
-            return self::parseReader($reader);
+            return self::parseReader($reader, false);
         } finally {
             @$reader->close();
             libxml_clear_errors();
@@ -82,8 +119,12 @@ final class ContainerXmlLoader
      *     visibility: array<string, bool>,
      * }
      */
-    private static function parseReader(XMLReader $reader): array
-    {
+    private static function parseReader(
+        XMLReader $reader,
+        bool $strict,
+        string $envVar = '',
+        string $path = '',
+    ): array {
         /** @var array<string, string> $classes */
         $classes = [];
         /** @var array<string, string> $aliases */
@@ -95,6 +136,7 @@ final class ContainerXmlLoader
         /** @var array<string, ParameterDescriptor> $parameters */
         $parameters = [];
 
+        $sawContainerRoot = false;
         $section = null;
         $currentServiceId = null;
         $currentServiceDepth = 0;
@@ -116,6 +158,17 @@ final class ContainerXmlLoader
 
             $local = $reader->localName;
             $depth = $reader->depth;
+
+            if ($depth === 0) {
+                if ($local === 'container') {
+                    $sawContainerRoot = true;
+                } elseif ($strict) {
+                    throw new RuntimeException(
+                        "mago-symfony: {$envVar} is not a Symfony container XML dump (expected <container>, found <{$local}>): {$path}",
+                    );
+                }
+                continue;
+            }
 
             if ($depth === 1) {
                 if ($local === 'services' || $local === 'parameters') {
@@ -180,6 +233,22 @@ final class ContainerXmlLoader
                 if ($factory !== null) {
                     $rawFactories[$currentServiceId] = $factory;
                 }
+            }
+        }
+
+        if ($strict) {
+            $errors = libxml_get_errors();
+            if ($errors !== []) {
+                $detail = trim($errors[0]->message);
+                throw new RuntimeException(
+                    "mago-symfony: {$envVar} contains malformed XML ({$detail}): {$path}",
+                );
+            }
+
+            if (!$sawContainerRoot) {
+                throw new RuntimeException(
+                    "mago-symfony: {$envVar} is empty or missing a <container> root element: {$path}",
+                );
             }
         }
 

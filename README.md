@@ -65,6 +65,8 @@ Service and parameter types come from Symfony's compiled container. Point the ex
 
 Without a compiled dump or JSON map, a class-name service ID resolves to that declared class or interface rather than any container alias or decorator, and non-class string service IDs such as `logger` stay `mixed`.
 
+Absent auto-discovery paths (`.mago/symfony-container.json` and `var/cache/{dev,test}/*Container.xml`) stay silent. When `MAGO_SYMFONY_CONTAINER_XML` or `MAGO_SYMFONY_CONTAINER_MAP` is explicitly set to a missing, unreadable, or malformed file, worker registration writes the error to stderr and fails cleanly without corrupting the worker stdout protocol. When `MAGO_SYMFONY_USER_CLASS` names a class that does not exist or does not implement `UserInterface`, the worker writes a warning to stderr and leaves `getUser()` unnarrowed.
+
 ## Checks
 
 | Code | Level | What it reports |

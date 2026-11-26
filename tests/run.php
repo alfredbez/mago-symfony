@@ -967,6 +967,8 @@ if ($arrayNodeHasTemplates) {
     ]);
 }
 
+$failures += verifyConfigErrorBehavior($magoCommand);
+
 if ($failures > 0) {
     fwrite(STDERR, "\n{$failures} assertion(s) failed\n");
     exit(1);
@@ -1184,6 +1186,158 @@ function assertSites(string $label, array $issues, array $expected): int
             fwrite(STDERR, '  expected ' . json_encode($sites) . "\n  actual   " . json_encode($actual) . "\n");
             $failures++;
         }
+    }
+
+    return $failures;
+}
+
+/**
+ * @param list<string> $magoCommand
+ */
+function verifyConfigErrorBehavior(array $magoCommand): int
+{
+    $failures = 0;
+    $tmpDir = sys_get_temp_dir() . '/mago-symfony-cfg-' . getmypid();
+    if (!is_dir($tmpDir)) {
+        mkdir($tmpDir, 0777, true);
+    }
+
+    $badXml = $tmpDir . '/broken.xml';
+    $wrongRootXml = $tmpDir . '/wrong-root.xml';
+    $badJson = $tmpDir . '/broken.json';
+    $stderrLog = $tmpDir . '/worker-stderr.log';
+    $wrapperConfig = $tmpDir . '/security-stderr.toml';
+    $wrapperWorker = $tmpDir . '/stderr-wrapper.php';
+
+    file_put_contents($badXml, "<container><services><service id=\"a\"></container>");
+    file_put_contents($wrongRootXml, "<not-a-container/>");
+    file_put_contents($badJson, "{invalid json");
+
+    try {
+        $errorCases = [
+            [
+                'label' => 'missing MAGO_SYMFONY_CONTAINER_XML',
+                'env' => ['MAGO_SYMFONY_CONTAINER_XML' => $tmpDir . '/does-not-exist.xml'],
+                'needle' => 'MAGO_SYMFONY_CONTAINER_XML points to a missing or unreadable file',
+            ],
+            [
+                'label' => 'malformed MAGO_SYMFONY_CONTAINER_XML',
+                'env' => ['MAGO_SYMFONY_CONTAINER_XML' => $badXml],
+                'needle' => 'MAGO_SYMFONY_CONTAINER_XML contains malformed XML',
+            ],
+            [
+                'label' => 'wrong-root MAGO_SYMFONY_CONTAINER_XML',
+                'env' => ['MAGO_SYMFONY_CONTAINER_XML' => $wrongRootXml],
+                'needle' => 'MAGO_SYMFONY_CONTAINER_XML is not a Symfony container XML dump',
+            ],
+            [
+                'label' => 'missing MAGO_SYMFONY_CONTAINER_MAP',
+                'env' => ['MAGO_SYMFONY_CONTAINER_MAP' => $tmpDir . '/does-not-exist.json'],
+                'needle' => 'MAGO_SYMFONY_CONTAINER_MAP points to a missing or unreadable file',
+            ],
+            [
+                'label' => 'malformed MAGO_SYMFONY_CONTAINER_MAP',
+                'env' => ['MAGO_SYMFONY_CONTAINER_MAP' => $badJson],
+                'needle' => 'MAGO_SYMFONY_CONTAINER_MAP contains malformed JSON',
+            ],
+        ];
+
+        foreach ($errorCases as $case) {
+            foreach ($case['env'] as $k => $v) {
+                putenv("{$k}={$v}");
+            }
+            $res = run([...$magoCommand, '--config', 'tests/mago-xml.toml', 'analyze', '--reporting-format=json']);
+            foreach (array_keys($case['env']) as $k) {
+                putenv($k);
+            }
+
+            $framingOk = !str_contains($res['stderr'], 'invalid extension frame magic');
+            $hasMsg = str_contains($res['stderr'], $case['needle']);
+            if ($res['exit'] !== 0 && $framingOk && $hasMsg) {
+                fwrite(STDOUT, "ok  config error  {$case['label']}\n");
+            } else {
+                $failures++;
+                fwrite(STDERR, "FAIL config error  {$case['label']} (exit={$res['exit']}, framingOk=" . ($framingOk ? 'yes' : 'no') . ")\n");
+                fwrite(STDERR, "  expected stderr containing: {$case['needle']}\n");
+                fwrite(STDERR, "  actual stderr: " . trim($res['stderr']) . "\n");
+            }
+        }
+
+        // Capture production worker STDERR during real Mago analysis to verify
+        // invalid MAGO_SYMFONY_USER_CLASS and silent absent auto-discovery without breaking framing.
+        $repoRoot = getcwd();
+        $workerBin = $repoRoot . '/bin/mago-symfony-worker';
+        $wrapperCode = <<<PHP
+<?php
+\$cmd = [PHP_BINARY, '-d', 'xdebug.mode=off', '-d', 'pcov.enabled=0', %s];
+\$p = proc_open(\$cmd, [0 => STDIN, 1 => STDOUT, 2 => ['file', %s, 'w']], \$pipes);
+exit(\$p === false ? 1 : proc_close(\$p));
+PHP;
+        file_put_contents(
+            $wrapperWorker,
+            sprintf($wrapperCode, var_export($workerBin, true), var_export($stderrLog, true)),
+        );
+
+        $secToml = (string) file_get_contents($repoRoot . '/tests/mago-security.toml');
+        $secToml = str_replace(
+            'command = ["php", "worker.php"]',
+            'command = [' . json_encode(PHP_BINARY, JSON_UNESCAPED_SLASHES) . ', ' . json_encode($wrapperWorker, JSON_UNESCAPED_SLASHES) . ']',
+            $secToml,
+        );
+        file_put_contents($wrapperConfig, $secToml);
+
+        $userCases = [
+            [
+                'label' => 'non-existent MAGO_SYMFONY_USER_CLASS',
+                'value' => 'SymfonyFixtureSecurity\\DoesNotExistUser',
+                'needle' => 'MAGO_SYMFONY_USER_CLASS `SymfonyFixtureSecurity\\DoesNotExistUser` does not exist',
+            ],
+            [
+                'label' => 'non-UserInterface MAGO_SYMFONY_USER_CLASS',
+                'value' => 'SymfonyFixtureSecurity\\NotAUser',
+                'needle' => 'MAGO_SYMFONY_USER_CLASS `SymfonyFixtureSecurity\\NotAUser` does not implement Symfony\\Component\\Security\\Core\\User\\UserInterface',
+            ],
+        ];
+
+        foreach ($userCases as $case) {
+            @unlink($stderrLog);
+            putenv('MAGO_SYMFONY_USER_CLASS=' . $case['value']);
+            $res = run([...$magoCommand, '--config', $wrapperConfig, '--workspace', $repoRoot, 'analyze', '--reporting-format=json']);
+            putenv('MAGO_SYMFONY_USER_CLASS');
+
+            $decoded = json_decode($res['stdout'], true);
+            $jsonOk = is_array($decoded) && isset($decoded['issues']) && is_array($decoded['issues']);
+            $workerStderr = is_file($stderrLog) ? (string) file_get_contents($stderrLog) : '';
+            $hasWarn = str_contains($workerStderr, $case['needle']);
+            if ($jsonOk && $hasWarn) {
+                fwrite(STDOUT, "ok  config warning  {$case['label']}\n");
+            } else {
+                $failures++;
+                fwrite(STDERR, "FAIL config warning  {$case['label']} (jsonOk=" . ($jsonOk ? 'yes' : 'no') . ")\n");
+                fwrite(STDERR, "  expected worker stderr containing: {$case['needle']}\n");
+                fwrite(STDERR, "  actual worker stderr: " . trim($workerStderr) . "\n");
+            }
+        }
+
+        // Absent auto-discovery stays silent and exits cleanly.
+        @unlink($stderrLog);
+        $silentRes = run([...$magoCommand, '--config', $wrapperConfig, '--workspace', $repoRoot, 'analyze', '--reporting-format=json']);
+        $silentDecoded = json_decode($silentRes['stdout'], true);
+        $silentStderr = is_file($stderrLog) ? trim((string) file_get_contents($stderrLog)) : '';
+        if (is_array($silentDecoded) && isset($silentDecoded['issues']) && $silentStderr === '') {
+            fwrite(STDOUT, "ok  config silent auto-discovery\n");
+        } else {
+            $failures++;
+            fwrite(STDERR, "FAIL config silent auto-discovery (worker stderr: {$silentStderr})\n");
+        }
+    } finally {
+        @unlink($badXml);
+        @unlink($wrongRootXml);
+        @unlink($badJson);
+        @unlink($stderrLog);
+        @unlink($wrapperConfig);
+        @unlink($wrapperWorker);
+        @rmdir($tmpDir);
     }
 
     return $failures;
