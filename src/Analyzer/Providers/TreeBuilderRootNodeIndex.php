@@ -12,10 +12,13 @@ use function array_key_exists;
 use function array_keys;
 use function array_pop;
 use function count;
+use function dirname;
 use function file_get_contents;
 use function get_declared_classes;
+use function getcwd;
 use function is_array;
 use function is_file;
+use function is_string;
 use function ltrim;
 use function str_contains;
 use function str_starts_with;
@@ -97,10 +100,11 @@ final class TreeBuilderRootNodeIndex implements BeforeAnalysisHook
 
         $deferredArrayFiles = [];
         foreach ($files as $file) {
-            if (!is_file($file)) {
+            $resolvedFile = self::resolveReadableFile($file);
+            if ($resolvedFile === null) {
                 continue;
             }
-            $contents = @file_get_contents($file);
+            $contents = @file_get_contents($resolvedFile);
             if ($contents === false || stripos($contents, 'getRootNode') === false) {
                 continue;
             }
@@ -191,7 +195,7 @@ final class TreeBuilderRootNodeIndex implements BeforeAnalysisHook
             foreach ($context->codebase->getMultipleClasses($classQuery) as $meta) {
                 if ($meta !== null) {
                     $file = $meta->location->file;
-                    if ($file !== '' && !str_contains($file, '/vendor/') && !str_starts_with($file, 'vendor/')) {
+                    if (is_string($file) && $file !== '' && !str_contains($file, '/vendor/') && !str_starts_with($file, 'vendor/')) {
                         $files[$file] = true;
                     }
                 }
@@ -213,7 +217,7 @@ final class TreeBuilderRootNodeIndex implements BeforeAnalysisHook
             foreach ($context->codebase->getMultipleFunctions($fnQuery) as $fnMeta) {
                 if ($fnMeta !== null) {
                     $file = $fnMeta->location->file;
-                    if ($file !== '' && !str_contains($file, '/vendor/') && !str_starts_with($file, 'vendor/')) {
+                    if (is_string($file) && $file !== '' && !str_contains($file, '/vendor/') && !str_starts_with($file, 'vendor/')) {
                         $files[$file] = true;
                     }
                 }
@@ -221,6 +225,36 @@ final class TreeBuilderRootNodeIndex implements BeforeAnalysisHook
         }
 
         return array_keys($files);
+    }
+
+    private static function resolveReadableFile(string $file): ?string
+    {
+        if (is_file($file)) {
+            return $file;
+        }
+
+        if (str_starts_with($file, '/') || str_starts_with($file, '\\')) {
+            return null;
+        }
+
+        $dir = getcwd();
+        if ($dir === false || $dir === '') {
+            return null;
+        }
+
+        for ($depth = 0; $depth < 6; ++$depth) {
+            $parent = dirname($dir);
+            if ($parent === $dir) {
+                break;
+            }
+            $dir = $parent;
+            $candidate = $dir . '/' . $file;
+            if (is_file($candidate)) {
+                return $candidate;
+            }
+        }
+
+        return null;
     }
 
     private static function isStubNamespace(string $lowerName): bool

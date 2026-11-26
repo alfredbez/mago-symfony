@@ -7,6 +7,9 @@ namespace AlfredBez\MagoSymfony\Analyzer\Providers;
 use Mago\Sdk\Analyzer\IssueFilterContext;
 use Mago\Sdk\Analyzer\IssueFilterDecision;
 use Mago\Sdk\Analyzer\IssueFilterHook;
+use Mago\Sdk\Analyzer\Metadata\FunctionLikeMetadata;
+use Mago\Sdk\Analyzer\Type;
+use Mago\Sdk\Analyzer\Type\NamedObjectType;
 use Mago\Sdk\Reporting\AnnotationKind;
 
 use function array_intersect_assoc;
@@ -85,13 +88,17 @@ use const T_WHITESPACE;
 /**
  * Suppresses Symfony 7's TreeBuilder<string> vs TreeBuilder<'array'> false positive
  * only when a matching TreeBuilder root type dominates every reachable path to the
- * reported return statement.
+ * reported return statement, and suppresses ArrayNodeDefinition<TreeBuilder<...>>
+ * vs ArrayNodeDefinition<null> parent mismatches only when the enclosing signature's
+ * effective return declaration is proven unparameterized.
  */
 final class TreeBuilderReturnIssueFilter implements IssueFilterHook
 {
     private const PATTERN = '/expected `Symfony\\\\Component\\\\Config\\\\Definition\\\\Builder\\\\TreeBuilder<string\(\'([a-z]+)\'\)>`, but found `Symfony\\\\Component\\\\Config\\\\Definition\\\\Builder\\\\TreeBuilder<string>`/';
+    private const ROOT_NODE_RETURN_PATTERN = '/^Invalid return type for function `([^`]+)`: expected `Symfony\\\\Component\\\\Config\\\\Definition\\\\Builder\\\\ArrayNodeDefinition<null>`, but found `Symfony\\\\Component\\\\Config\\\\Definition\\\\Builder\\\\ArrayNodeDefinition<Symfony\\\\Component\\\\Config\\\\Definition\\\\Builder\\\\TreeBuilder(?:<[^>]+>)?>`\.$/';
     private const TREE_BUILDER_NS = 'symfony\\component\\config\\definition\\builder';
     private const TREE_BUILDER_FQN = self::TREE_BUILDER_NS . '\\treebuilder';
+    private const ARRAY_NODE_DEFINITION_FQN = self::TREE_BUILDER_NS . '\\arraynodedefinition';
 
     private const KNOWN_ROOT_TYPES = [
         'array' => true,
@@ -132,11 +139,25 @@ final class TreeBuilderReturnIssueFilter implements IssueFilterHook
 
     public function filterIssue(IssueFilterContext $context): IssueFilterDecision
     {
-        if (!str_contains($context->issue->message, 'TreeBuilder<string>')) {
+        $message = $context->issue->message;
+        if (str_contains($message, 'ArrayNodeDefinition<null>')) {
+            $rootMatch = [];
+            if (
+                preg_match(self::ROOT_NODE_RETURN_PATTERN, $message, $rootMatch) === 1
+                && $this->isProvenUnparameterizedArrayNodeReturnTarget($context, $rootMatch[1])
+            ) {
+                return IssueFilterDecision::Remove;
+            }
+
             return IssueFilterDecision::Keep;
         }
 
-        if (preg_match(self::PATTERN, $context->issue->message, $match) !== 1) {
+        if (!str_contains($message, 'TreeBuilder<string>')) {
+            return IssueFilterDecision::Keep;
+        }
+
+        $match = [];
+        if (preg_match(self::PATTERN, $message, $match) !== 1) {
             return IssueFilterDecision::Keep;
         }
 
@@ -158,6 +179,91 @@ final class TreeBuilderReturnIssueFilter implements IssueFilterHook
         return $actualRootType === $expectedRootType
             ? IssueFilterDecision::Remove
             : IssueFilterDecision::Keep;
+    }
+
+    private function isProvenUnparameterizedArrayNodeReturnTarget(IssueFilterContext $context, string $symbol): bool
+    {
+        if (str_contains($symbol, '::')) {
+            [$className, $methodName] = explode('::', $symbol, 2);
+            if ($className === '' || $methodName === '') {
+                return false;
+            }
+
+            $classMeta = $context->codebase->getClassLike($className);
+            $methodMeta = $context->codebase->getMethod($className, $methodName);
+            if ($classMeta === null || $methodMeta === null || $classMeta->hasIncompleteHierarchy()) {
+                return false;
+            }
+
+            if (!self::hasUnparameterizedArrayNodeReturn($methodMeta)) {
+                return false;
+            }
+
+            $queue = [...$classMeta->parentClasses, ...$classMeta->parentInterfaces, ...$classMeta->usedTraits];
+            $visited = [strtolower($className) => true];
+            while ($queue !== []) {
+                $ancestor = array_pop($queue);
+                $ancestorKey = strtolower($ancestor);
+                if (isset($visited[$ancestorKey])) {
+                    continue;
+                }
+                $visited[$ancestorKey] = true;
+
+                $ancestorClass = $context->codebase->getClassLike($ancestor);
+                if ($ancestorClass === null || $ancestorClass->hasIncompleteHierarchy()) {
+                    return false;
+                }
+
+                $ancestorMethod = $context->codebase->getMethod($ancestor, $methodName);
+                if ($ancestorMethod !== null && $ancestorMethod->returnType?->fromDocblock === true) {
+                    return false;
+                }
+
+                foreach ([...$ancestorClass->parentClasses, ...$ancestorClass->parentInterfaces, ...$ancestorClass->usedTraits] as $next) {
+                    if (!isset($visited[strtolower($next)])) {
+                        $queue[] = $next;
+                    }
+                }
+            }
+
+            return true;
+        }
+
+        $functionMeta = $context->codebase->getFunction($symbol);
+        if ($functionMeta === null) {
+            return false;
+        }
+
+        return self::hasUnparameterizedArrayNodeReturn($functionMeta);
+    }
+
+    private static function hasUnparameterizedArrayNodeReturn(FunctionLikeMetadata $metadata): bool
+    {
+        $declared = $metadata->declaredReturnType;
+        $effective = $metadata->returnType;
+        if ($declared === null || $effective === null) {
+            return false;
+        }
+
+        if ($effective->fromDocblock) {
+            return false;
+        }
+
+        return self::isUnparameterizedArrayNodeType($declared->type)
+            && self::isUnparameterizedArrayNodeType($effective->type);
+    }
+
+    private static function isUnparameterizedArrayNodeType(Type $type): bool
+    {
+        if (count($type->atomicTypes) !== 1) {
+            return false;
+        }
+
+        $atomic = $type->atomicTypes[0];
+
+        return $atomic instanceof NamedObjectType
+            && strtolower($atomic->name) === self::ARRAY_NODE_DEFINITION_FQN
+            && $atomic->parameters === null;
     }
 
     private function resolveDominatingReturnRootType(string $contents, int $targetOffset): ?string

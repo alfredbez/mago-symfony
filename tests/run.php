@@ -6,6 +6,10 @@ chdir(dirname(__DIR__));
 
 require __DIR__ . '/../vendor/autoload.php';
 $isSymfony7 = class_exists(\Symfony\Component\Config\Definition\Builder\StringNodeDefinition::class);
+$arrayNodeHasTemplates = str_contains(
+    (string) (new ReflectionClass(\Symfony\Component\Config\Definition\Builder\ArrayNodeDefinition::class))->getDocComment(),
+    '@template',
+);
 $serializerHasTemplates = str_contains(
     (string) (new ReflectionMethod(\Symfony\Component\Serializer\SerializerInterface::class, 'deserialize'))->getDocComment(),
     '@template',
@@ -66,6 +70,7 @@ $expected = [
             'non-existent-method' => 2,
         ],
         'tests/fixtures/TreeBuilderReturnPaths.php' => [],
+        'tests/fixtures/TreeBuilderRootNodeReturn.php' => [],
         'tests/fixtures/TreeBuilderReturnPathsNegative.php' => $isSymfony7
             ? [
                 'invalid-return-statement' => 14,
@@ -147,6 +152,16 @@ $expected = [
             ]
             : [
                 'non-existent-method' => 2,
+            ],
+        'tests/fixtures/TreeBuilderRootNodeReturn.php' => $isSymfony7
+            ? [
+                'invalid-return-statement' => 1,
+                'less-specific-return-statement' => 3,
+                'non-existent-method' => 32,
+            ]
+            : [
+                'less-specific-return-statement' => 3,
+                'non-existent-method' => 4,
             ],
         'tests/fixtures/TreeBuilderReturnPathsNegative.php' => $isSymfony7
             ? [
@@ -336,6 +351,7 @@ $sites = [
             '32:non-existent-method',
         ],
         'tests/fixtures/TreeBuilderReturnPaths.php' => [],
+        'tests/fixtures/TreeBuilderRootNodeReturn.php' => [],
         'tests/fixtures/TreeBuilderReturnPathsNegative.php' => $isSymfony7
             ? [
                 '21:invalid-return-statement',
@@ -919,6 +935,37 @@ $failures += assertHistograms('serializer untemplated --no-extensions', $seriali
 ]);
 $failures += assertMessageCount('serializer untemplated with extension', $serializerUntemplatedWith, 'tests/fixtures-serializer-untemplated/SerializerClassStringNegative.php', 'non-existent-method', 'missingOnDeserialized', 1);
 $failures += assertMessageCount('serializer untemplated with extension', $serializerUntemplatedWith, 'tests/fixtures-serializer-untemplated/SerializerClassStringNegative.php', 'non-existent-method', 'missingOnDenormalized', 1);
+
+if ($arrayNodeHasTemplates) {
+    $tbReturnWith = analyze(false, 'tests/mago-treebuilder-return.toml');
+    $tbReturnWithout = analyze(true, 'tests/mago-treebuilder-return.toml');
+    $failures += assertHistograms('treebuilder return negative with extension', $tbReturnWith, [
+        'tests/fixtures-treebuilder-return/TreeBuilderRootNodeReturnNegative.php' => [
+            'invalid-return-statement' => 7,
+            'less-specific-return-statement' => 1,
+            'non-existent-method' => 1,
+        ],
+    ]);
+    $failures += assertHistograms('treebuilder return negative --no-extensions', $tbReturnWithout, [
+        'tests/fixtures-treebuilder-return/TreeBuilderRootNodeReturnNegative.php' => [
+            'less-specific-return-statement' => 8,
+            'non-existent-method' => 1,
+        ],
+    ]);
+    $failures += assertSites('treebuilder return negative with extension', $tbReturnWith, [
+        'tests/fixtures-treebuilder-return/TreeBuilderRootNodeReturnNegative.php' => [
+            '26:invalid-return-statement',
+            '45:invalid-return-statement',
+            '55:invalid-return-statement',
+            '60:invalid-return-statement',
+            '65:invalid-return-statement',
+            '70:invalid-return-statement',
+            '75:invalid-return-statement',
+            '85:less-specific-return-statement',
+            '90:non-existent-method',
+        ],
+    ]);
+}
 
 if ($failures > 0) {
     fwrite(STDERR, "\n{$failures} assertion(s) failed\n");
