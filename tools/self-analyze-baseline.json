@@ -1,0 +1,15 @@
+{
+    "max_errors": 0,
+    "by_code": {
+        "impossible-type-comparison": 3,
+        "invalid-type-cast": 2,
+        "possibly-null-array-index": 1,
+        "possibly-null-operand": 19,
+        "redundant-cast": 5,
+        "redundant-comparison": 3,
+        "redundant-logical-operation": 3,
+        "redundant-null-coalesce": 1,
+        "redundant-type-comparison": 2,
+        "reference-to-undefined-variable": 2
+    }
+}

@@ -66,6 +66,8 @@ use const T_WHITESPACE;
  * - `self::AMBIGUOUS` when a span collides across files with differing root types or
  *   when the TreeBuilder root type is dynamic, conditionally reassigned, or rebound
  * - `null` when the span is unseen (e.g. parameter-passed TreeBuilder or unit tests)
+ *
+ * @internal
  */
 final class TreeBuilderRootNodeIndex implements BeforeAnalysisHook
 {
@@ -238,7 +240,7 @@ final class TreeBuilderRootNodeIndex implements BeforeAnalysisHook
         }
 
         $dir = getcwd();
-        if ($dir === false || $dir === '') {
+        if ($dir === false) {
             return null;
         }
 
@@ -666,7 +668,6 @@ final class TreeBuilderRootNodeIndex implements BeforeAnalysisHook
         }
 
         $positional = 0;
-        $hasTypeArg = false;
         foreach ($argRanges as [$aStart, $aEnd]) {
             if ($aStart >= $aEnd) {
                 continue;
@@ -678,22 +679,18 @@ final class TreeBuilderRootNodeIndex implements BeforeAnalysisHook
                 && $tokens[$aStart + 1]['id'] === ':'
             ) {
                 if ($tokens[$aStart]['text'] === 'type') {
-                    $hasTypeArg = true;
-
                     return self::extractLiteralRootType($tokens, $aStart + 2, $aEnd);
                 }
                 continue;
             }
 
             if ($positional === 1) {
-                $hasTypeArg = true;
-
                 return self::extractLiteralRootType($tokens, $aStart, $aEnd);
             }
             ++$positional;
         }
 
-        return $hasTypeArg ? self::AMBIGUOUS : 'array';
+        return 'array';
     }
 
     /**

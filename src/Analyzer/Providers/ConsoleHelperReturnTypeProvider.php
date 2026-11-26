@@ -12,6 +12,8 @@ use Mago\Sdk\Analyzer\Type;
 /**
  * Narrows HelperSet::get() and Command::getHelper() for Symfony Console's built-in
  * default helpers registered by Application::getDefaultHelperSet().
+ *
+ * @internal
  */
 final class ConsoleHelperReturnTypeProvider implements MethodReturnTypeProvider
 {

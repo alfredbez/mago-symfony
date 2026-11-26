@@ -1,6 +1,6 @@
 # alfredbez/mago-symfony
 
-[![tests](https://github.com/alfredbez/mago-symfony/actions/workflows/ci.yml/badge.svg)](https://github.com/alfredbez/mago-symfony/actions/workflows/ci.yml)
+[![ci](https://github.com/alfredbez/mago-symfony/actions/workflows/ci.yml/badge.svg)](https://github.com/alfredbez/mago-symfony/actions/workflows/ci.yml)
 [![Packagist version](https://img.shields.io/packagist/v/alfredbez/mago-symfony.svg)](https://packagist.org/packages/alfredbez/mago-symfony)
 [![Packagist downloads](https://img.shields.io/packagist/dt/alfredbez/mago-symfony.svg)](https://packagist.org/packages/alfredbez/mago-symfony)
 ![PHP](https://img.shields.io/badge/php-8.1%20to%208.6-777BB4)
@@ -8,11 +8,12 @@
 [![Symfony](https://img.shields.io/badge/symfony-6.4%20%7C%207.x-black)](https://symfony.com)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-Symfony support for [Mago](https://github.com/carthage-software/mago). It teaches Mago the types behind Symfony's container, config builders, console commands, and HTTP, Form, Serializer, Messenger, and Security APIs.
+Symfony support for [Mago](https://github.com/carthage-software/mago). It teaches Mago the types behind Symfony's container, config builders, console commands, lifecycle hooks, and HTTP, Form, Serializer, Messenger, and Security APIs.
 
 - Reports private service access and console argument or option typos that Symfony only rejects at runtime.
 - Turns `ContainerInterface::get()` and parameter lookups into concrete types.
 - Types `TreeBuilder` and `NodeBuilder` chains, so node methods and `end()` return values resolve.
+- Recognizes Symfony lifecycle initializers, public `#[Required]` properties, and method-level entry points.
 - Narrows `Request`, `HeaderBag`, `Form`, `Serializer`, and Security calls that return `mixed` or a broad type on Symfony 6.4 and 7.x.
 
 A console typo Mago reports before the command runs:
@@ -25,7 +26,7 @@ $input->getArgument('user_name'); // alfredbez/symfony/unknown-console-argument
 
 ## Setup
 
-Requires PHP 8.1 or newer, Mago `^1.60.2`, and Symfony `^6.4 || ^7.0`.
+Requires PHP 8.1 or newer (with `dom`, `libxml`, `tokenizer`, and `xmlreader`), Mago `^1.60.2`, and Symfony `^6.4 || ^7.0`.
 
 ```shell
 composer require --dev alfredbez/mago-symfony
@@ -40,10 +41,17 @@ includes = ["vendor/symfony", "vendor/psr"]
 [extension-hosts.symfony]
 command = ["php", "-d", "xdebug.mode=off", "-d", "pcov.enabled=0", "vendor/bin/mago-symfony-worker"]
 workers = 1
+# Optional. Configure container dumps, strict service checks, or a Security user class.
+# environment = {
+#     MAGO_SYMFONY_CONTAINER_XML = "var/cache/dev/App_KernelDevDebugContainer.xml",
+#     MAGO_SYMFONY_USER_CLASS = "App\\Entity\\User",
+#     MAGO_SYMFONY_STRICT_CONTAINER_SERVICES = "1",
+# }
 ```
 
 - `[source] includes` must contain the Symfony packages your app uses and the PSR container contracts. Mago reads those files to resolve method signatures. Listing `vendor/symfony` covers every installed Symfony package. If you list individual packages instead, keep the ones your app calls.
 - The `-d` flags keep Xdebug and PCOV out of the worker. Both hooks add startup cost and coverage bookkeeping to a run that only reads code.
+- Pass worker environment variables through `[extension-hosts.symfony] environment`. Leave the table unset, or omit keys you do not need, to keep defaults and auto-discovery active.
 
 Check the worker and run the analyzer:
 
@@ -58,7 +66,7 @@ Service and parameter types come from Symfony's compiled container. Point the ex
 
 | Variable | What it does |
 | --- | --- |
-| `MAGO_SYMFONY_CONTAINER_XML` | Path to the compiled container XML, for example `var/cache/dev/App_KernelDevDebugContainer.xml`. When unset, the extension searches `var/cache/dev/*Container.xml` from the working directory. |
+| `MAGO_SYMFONY_CONTAINER_XML` | Path to the compiled container XML, for example `var/cache/dev/App_KernelDevDebugContainer.xml`. When unset, the extension searches `var/cache/dev/*Container.xml` and `var/cache/test/*Container.xml` in sorted path order from the working directory. |
 | `MAGO_SYMFONY_CONTAINER_MAP` | Path to a JSON file that maps service IDs to class or interface names. Defaults to `.mago/symfony-container.json` when that file exists. Targets must exist in Mago's codebase. |
 | `MAGO_SYMFONY_USER_CLASS` | FQCN of a class or interface that implements `UserInterface`. Narrows Security `getUser()` to `ConfiguredUser` or `null`. |
 | `MAGO_SYMFONY_STRICT_CONTAINER_SERVICES` | Set to `1` to report `alfredbez/symfony/unknown-service-id` for literal IDs that are missing from the compiled XML. Requires a loaded XML dump. |
@@ -78,7 +86,7 @@ Absent auto-discovery paths (`.mago/symfony-container.json` and `var/cache/{dev,
 | `alfredbez/symfony/unknown-console-option` | error | `getOption('name')` asks for an option that `configure()` does not declare. |
 | `alfredbez/symfony/invalid-console-input-definition` | error | `InputArgument` or `InputOption` uses a mode and default combination that Symfony rejects, such as `VALUE_NONE` with a non-null default. |
 
-`private-service-access` skips `ServiceLocator`, `ContainerBuilder`, `TestContainer`, PHPUnit `TestCase` subclasses, and calls with a non-throwing invalid-reference flag. `unknown-console-*` skips `parent::configure()`, definitions built by dynamic helper methods, and the default application options (`help`, `quiet`, `silent`, `verbose`, `version`, `ansi`, `no-ansi`, `no-interaction`, `env`, `no-debug`, `profile`).
+`private-service-access` skips `ServiceLocator`, `ContainerBuilder`, `TestContainer`, PHPUnit `TestCase` subclasses, and calls with a non-throwing invalid-reference flag. `unknown-console-*` skips `parent::configure()`, definitions built by dynamic helper methods, and the default application options derived from the analyzed Symfony Console `Application` class.
 
 To silence a code in one project:
 
@@ -101,24 +109,40 @@ $container->get('app.private_service');
 | `ContainerInterface::get('id')` and `Container::get('id')` | The service class from the compiled XML or JSON map, including multi-hop aliases, class and service factories, and class-name IDs. `ContainerBuilder`, `ServiceLocator`, and `ServiceProviderInterface` fall back to class-name resolution. |
 | `ParameterBagInterface::get()`, `ContainerInterface::getParameter()`, `Container::getParameter()`, `AbstractController::getParameter()` | The parameter's literal scalar, list, keyed array, constant, or `%env(...)%` type. |
 | `Container::get()` and `ContainerBuilder::get()` with invalid-reference flags | Nullable returns for flags `0`, `2`, `3`, and `4` on `Container`; non-null for flags `0` and `1` on `ContainerBuilder`. |
-| `TreeBuilder` and `NodeDefinition` chains | The node type after `children()`, `node()`, prototypes, `validate()`, `beforeNormalization()`, and `end()`. Tracks custom `NodeBuilder` classes through `setNodeClass()` and `setParent()`. |
+| `TreeBuilder` and `NodeDefinition` chains | The node type after `children()`, `node()`, prototypes, `validate()`, `beforeNormalization()`, and `end()`. Tracks custom `NodeBuilder` classes through `setNodeClass()` and `setParent()`, and accepts unparameterized `: ArrayNodeDefinition` root-node returns while keeping explicit and inherited generic mismatches reported. |
 | `HelperSet::get()` and `Command::getHelper()` | `FormatterHelper`, `DebugFormatterHelper`, `ProcessHelper`, or `QuestionHelper` for the four default names. |
 | `HeaderBag::get($key, $default)` | `string` when the default is a non-null string. |
 | `ParameterBag::getEnum()` and `InputBag::getEnum()` | The target `BackedEnum` when a matching non-null default is supplied. |
 | `Request::getRequestFormat()` and `getPreferredFormat()` | `string` when the default is omitted or is a non-null string. |
-| `Request::getPreferredLanguage()` | `string` for a non-empty 0-indexed list of strings. |
+| `Request::getPreferredLanguage()` | `string` for a non-empty list or keyed array containing a required `0` string entry. |
 | `ResponseHeaderBag::getCookies()` | `list<Cookie>` for `COOKIES_FLAT`, nested `Cookie` arrays for `COOKIES_ARRAY`. |
 | `ControllerEvent::getAttributes()` and `ControllerArgumentsEvent::getAttributes()` | `list<T>` when the class-string argument names an existing class or interface. |
 | `FormInterface::getErrors()` | `FormErrorIterator<FormError>`, or an iterator of `FormError` and nested iterators when `$deep` may be true and `$flatten` may be false. |
-| `SerializerInterface::deserialize()` and `DenormalizerInterface::denormalize()` | `Foo`, `array<array-key, Foo>`, or nested arrays for literal `Foo`, `Foo[]`, and `Foo[][]` types. |
+| `SerializerInterface::deserialize()` and `DenormalizerInterface::denormalize()` | `Foo`, `array<array-key, Foo>`, or nested arrays for literal `Foo`, `Foo[]`, and `Foo[][]` types, plus `class-string<Foo>` arguments. |
 | `WrappedExceptionsInterface::getWrappedExceptions()` | `array<array-key, T>` for a concrete class or interface filter. |
 | Security `getUser()` | `ConfiguredUser` or `null` when `MAGO_SYMFONY_USER_CLASS` is set. Covers `AbstractController`, `SecurityBundle\Security`, `Security\Core\Security`, and `TokenInterface`. |
-| Lifecycle methods | `AbstractController::setContainer()`, `ConstraintValidator::initialize()`, `InputAwareHelper::setInput()`, and methods with `#[Required]` initialize properties when `check-property-initialization = true`. |
+| Lifecycle initializers and `#[Required]` properties | `AbstractController::setContainer()`, `Command::initialize()`, `ConstraintValidator::initialize()`, `InputAwareHelper::setInput()`, methods with `#[Required]`, and non-readonly public writable properties with `#[Required]` initialize properties when `check-property-initialization = true`. |
+| Method-level entry points | Recognizes method attributes (`#[Route]`, `#[AsEventListener]`, `#[AsMessageHandler]`, `#[Callback]`, `#[Required]`) and standard Symfony lifecycle overrides (`Command`, `AbstractType`, `ConstraintValidator`, `Voter`, `ConfigurationInterface`, `ExtensionInterface`, `CompilerPassInterface`, `EventSubscriberInterface`, `ServiceSubscriberInterface`) when `find-unused-definitions = true`. |
+
+## Compatibility and SemVer policy
+
+This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html) from `1.0.0`.
+
+**Public PHP API.** `AlfredBez\MagoSymfony\SymfonyExtension::create()` is the supported entry point. Analyzer plugins, providers, hooks, and helper classes under `AlfredBez\MagoSymfony\Analyzer` are `@internal`. They can change without a major version bump.
+
+**Worker.** `bin/mago-symfony-worker` (Composer `vendor/bin/mago-symfony-worker`) is the supported CLI. Stdout is the Mago extension protocol. Diagnostics and warnings go to stderr.
+
+**Diagnostic codes.** `alfredbez/symfony/private-service-access`, `alfredbez/symfony/invalid-root-node-method`, `alfredbez/symfony/unknown-console-argument`, `alfredbez/symfony/unknown-console-option`, and `alfredbez/symfony/invalid-console-input-definition` are enabled by default. `alfredbez/symfony/unknown-service-id` is **opt-in** via `MAGO_SYMFONY_STRICT_CONTAINER_SERVICES=1`. Adding a new default-on diagnostic is a minor bump. Changing the meaning of an existing code, removing a code, or turning an opt-in check on by default is a major bump.
+
+**Suppression.** Project-wide `[analyzer] ignore = ["alfredbez/symfony/..."]` and per-call `// @mago-ignore analysis:alfredbez/symfony/...` remain supported.
+
+**Supported floors.** PHP `~8.1` through `~8.6` (with `ext-dom`, `ext-libxml`, `ext-tokenizer`, `ext-xmlreader`), Mago `^1.60.2` (verified on `1.60.2` and `1.61.0`), Symfony `^6.4 || ^7.0`.
 
 ## Known limitations
 
 - `ContainerInterface::has()` cannot narrow a later `get()`. Mago `1.60.2` through `1.61.0` narrows only parameter variables and `$this` in invocation assertions.
 - Return-type providers cannot read the enclosing `Command` class. Per-command narrowing of `getArgument()` and `getOption()` stays blocked in the Mago SDK. The extension validates argument and option names instead.
+- Class-level `#[AsEventListener]` and `#[AsMessageHandler]` attributes (routing to `__invoke()`) are not registered as entry points yet. Mago `1.60.2` through `1.61.0` matches method attributes in `registerAttributedEntryPoint()`. Class-level entry points are deferred until the Mago SDK supports them.
 - `SessionInterface::get()`, `InputBag::get()`, `Route::getDefault()`, and `FormConfigInterface::getOption()` are not narrowed on defaults. A stored `null` or a configured value can bypass the default at runtime.
 - `HandledStamp::getResult()` stays `mixed` because compiled container XML has no message-to-handler return graph.
 - `Envelope::last()`, `Envelope::all()`, `Request::getContent()`, `FileLocatorInterface::locate()`, `EventDispatcherInterface::dispatch()`, `CacheInterface::get()`, `ValidatorInterface::validate()`, `RouteCollection`, `FormView`, and Twig helpers are already typed by Mago from Symfony 6.4 and 7.x vendor signatures.
@@ -136,7 +160,7 @@ php tests/check-spec.php
 composer test
 ```
 
-`composer test` runs Symfony runtime contract tests, validates `bin/mago-symfony-worker`, and checks exact diagnostics in JSON map, compiled XML, and Security user modes.
+`composer test` runs Symfony runtime contract tests, validates `bin/mago-symfony-worker`, and checks exact diagnostics in JSON map, compiled XML, Security user, plain console, lifecycle, and explicit config-error modes.
 
 Run pinned OSS corpus checks (`symfony-demo`, `symfony`, `shopware`, `drupal`):
 

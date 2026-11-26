@@ -32,6 +32,7 @@ use Mago\Sdk\Analyzer\Plugin;
 use Mago\Sdk\Analyzer\PluginDefinition;
 use Mago\Sdk\Analyzer\PluginRegistry;
 
+/** @internal */
 final class SymfonyPlugin implements Plugin
 {
     public function __construct(

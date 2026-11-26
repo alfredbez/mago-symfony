@@ -17,6 +17,8 @@ use Mago\Sdk\Analyzer\Type\StringType;
 
 /**
  * Narrows HeaderBag::get($key, $default) when a non-null string default is supplied.
+ *
+ * @internal
  */
 final class HeaderBagGetReturnTypeProvider implements MethodReturnTypeProvider
 {

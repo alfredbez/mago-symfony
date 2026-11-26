@@ -12,6 +12,8 @@ use Mago\Sdk\Analyzer\Type;
 /**
  * Narrows FormInterface::getErrors($deep = false, $flatten = true) to
  * FormErrorIterator<FormError> unless $deep can be true while $flatten can be false.
+ *
+ * @internal
  */
 final class FormGetErrorsReturnTypeProvider implements MethodReturnTypeProvider
 {

@@ -18,6 +18,8 @@ use Mago\Sdk\Analyzer\Type\ScalarType;
  * Narrows ParameterBag::getEnum() and InputBag::getEnum() to the target BackedEnum
  * when a non-null default of that enum is supplied (closing Symfony 6.4's missing
  * conditional @psalm-return annotation).
+ *
+ * @internal
  */
 final class ParameterBagEnumReturnTypeProvider implements MethodReturnTypeProvider
 {

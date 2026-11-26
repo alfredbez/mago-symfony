@@ -186,7 +186,7 @@ foreach ($targets as $name => $spec) {
         }
     }
     $includesToml = implode(', ', array_map(static fn (string $p): string => json_encode($p, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES), $includeList));
-    $workerPath = json_encode($repoRoot . '/tests/worker.php', JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES);
+    $workerPath = json_encode($repoRoot . '/bin/mago-symfony-worker', JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES);
     $phpBin = json_encode(PHP_BINARY, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES);
 
     $toml = <<<TOML
@@ -203,7 +203,7 @@ find-unused-expressions = false
 check-property-initialization = false
 
 [extension-hosts.symfony]
-command = [{$phpBin}, {$workerPath}]
+command = [{$phpBin}, "-d", "xdebug.mode=off", "-d", "pcov.enabled=0", {$workerPath}]
 workers = 1
 TOML;
     file_put_contents($tomlPath, $toml);

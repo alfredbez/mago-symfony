@@ -16,6 +16,8 @@ use Mago\Sdk\Analyzer\Type\SimpleAtomicTypeKind;
 /**
  * Narrows Request::getRequestFormat() and Request::getPreferredFormat() to string
  * when $default is omitted (defaults to 'html') or is a non-null string.
+ *
+ * @internal
  */
 final class RequestFormatReturnTypeProvider implements MethodReturnTypeProvider
 {

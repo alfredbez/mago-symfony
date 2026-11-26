@@ -91,6 +91,8 @@ use const T_WHITESPACE;
  * reported return statement, and suppresses ArrayNodeDefinition<TreeBuilder<...>>
  * vs ArrayNodeDefinition<null> parent mismatches only when the enclosing signature's
  * effective return declaration is proven unparameterized.
+ *
+ * @internal
  */
 final class TreeBuilderReturnIssueFilter implements IssueFilterHook
 {
@@ -1469,28 +1471,23 @@ final class TreeBuilderReturnIssueFilter implements IssueFilterHook
             }
         }
         $positional = 0;
-        $hasTypeArg = false;
         foreach ($argRanges as [$aStart, $aEnd]) {
             if ($aStart >= $aEnd) {
                 continue;
             }
             if ($aStart + 2 <= $aEnd && $this->tokens[$aStart]['id'] === T_STRING && $this->tokens[$aStart + 1]['id'] === ':') {
                 if ($this->tokens[$aStart]['text'] === 'type') {
-                    $hasTypeArg = true;
-
                     return $this->extractLiteralRootType($aStart + 2, $aEnd);
                 }
                 continue;
             }
             if ($positional === 1) {
-                $hasTypeArg = true;
-
                 return $this->extractLiteralRootType($aStart, $aEnd);
             }
             ++$positional;
         }
 
-        return $hasTypeArg ? null : 'array';
+        return 'array';
     }
 
     /**

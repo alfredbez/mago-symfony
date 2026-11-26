@@ -19,6 +19,8 @@ use Mago\Sdk\Analyzer\Type\SimpleAtomicTypeKind;
 /**
  * Narrows Request::getPreferredLanguage($locales) to string when $locales is a
  * non-empty 0-indexed list of strings.
+ *
+ * @internal
  */
 final class RequestPreferredLanguageReturnTypeProvider implements MethodReturnTypeProvider
 {

@@ -17,6 +17,8 @@ use Mago\Sdk\Analyzer\Type\ScalarType;
  * Narrows ControllerEvent::getAttributes($className) and
  * ControllerArgumentsEvent::getAttributes($className) to list<T> when a concrete
  * attribute class name is supplied (closing Symfony 6.4's list<object> return type).
+ *
+ * @internal
  */
 final class ControllerAttributesReturnTypeProvider implements MethodReturnTypeProvider
 {

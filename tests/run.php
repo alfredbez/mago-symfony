@@ -1234,6 +1234,7 @@ function verifyConfigErrorBehavior(array $magoCommand): int
     $badJson = $tmpDir . '/broken.json';
     $stderrLog = $tmpDir . '/worker-stderr.log';
     $wrapperConfig = $tmpDir . '/security-stderr.toml';
+    $xmlWrapperConfig = $tmpDir . '/xml-stderr.toml';
     $wrapperWorker = $tmpDir . '/stderr-wrapper.php';
 
     file_put_contents($badXml, "<container><services><service id=\"a\"></container>");
@@ -1241,6 +1242,37 @@ function verifyConfigErrorBehavior(array $magoCommand): int
     file_put_contents($badJson, "{invalid json");
 
     try {
+        $repoRoot = getcwd();
+        $workerBin = $repoRoot . '/bin/mago-symfony-worker';
+        $wrapperCode = <<<PHP
+<?php
+\$cmd = [PHP_BINARY, '-d', 'xdebug.mode=off', '-d', 'pcov.enabled=0', %s];
+\$p = proc_open(\$cmd, [0 => STDIN, 1 => STDOUT, 2 => ['pipe', 'w']], \$pipes);
+if (\$p === false) {
+    exit(1);
+}
+\$err = (string) stream_get_contents(\$pipes[2]);
+fclose(\$pipes[2]);
+file_put_contents(%s, \$err);
+if (\$err !== '') {
+    fwrite(STDERR, \$err);
+    fflush(STDERR);
+}
+exit(proc_close(\$p));
+PHP;
+        file_put_contents(
+            $wrapperWorker,
+            sprintf($wrapperCode, var_export($workerBin, true), var_export($stderrLog, true)),
+        );
+
+        $xmlToml = (string) file_get_contents($repoRoot . '/tests/mago-xml.toml');
+        $xmlToml = str_replace(
+            'command = ["php", "worker.php"]',
+            'command = [' . json_encode(PHP_BINARY, JSON_UNESCAPED_SLASHES) . ', ' . json_encode($wrapperWorker, JSON_UNESCAPED_SLASHES) . ']',
+            $xmlToml,
+        );
+        file_put_contents($xmlWrapperConfig, $xmlToml);
+
         $errorCases = [
             [
                 'label' => 'missing MAGO_SYMFONY_CONTAINER_XML',
@@ -1270,40 +1302,28 @@ function verifyConfigErrorBehavior(array $magoCommand): int
         ];
 
         foreach ($errorCases as $case) {
+            @unlink($stderrLog);
             foreach ($case['env'] as $k => $v) {
                 putenv("{$k}={$v}");
             }
-            $res = run([...$magoCommand, '--config', 'tests/mago-xml.toml', 'analyze', '--reporting-format=json']);
+            $res = run([...$magoCommand, '--config', $xmlWrapperConfig, '--workspace', $repoRoot, 'analyze', '--reporting-format=json']);
             foreach (array_keys($case['env']) as $k) {
                 putenv($k);
             }
 
             $framingOk = !str_contains($res['stderr'], 'invalid extension frame magic');
-            $hasMsg = str_contains($res['stderr'], $case['needle']);
+            $workerStderr = is_file($stderrLog) ? (string) file_get_contents($stderrLog) : '';
+            $hasMsg = str_contains($workerStderr, $case['needle']) || str_contains($res['stderr'], $case['needle']);
             if ($res['exit'] !== 0 && $framingOk && $hasMsg) {
                 fwrite(STDOUT, "ok  config error  {$case['label']}\n");
             } else {
                 $failures++;
                 fwrite(STDERR, "FAIL config error  {$case['label']} (exit={$res['exit']}, framingOk=" . ($framingOk ? 'yes' : 'no') . ")\n");
                 fwrite(STDERR, "  expected stderr containing: {$case['needle']}\n");
-                fwrite(STDERR, "  actual stderr: " . trim($res['stderr']) . "\n");
+                fwrite(STDERR, "  actual mago stderr: " . trim($res['stderr']) . "\n");
+                fwrite(STDERR, "  actual worker stderr: " . trim($workerStderr) . "\n");
             }
         }
-
-        // Capture production worker STDERR during real Mago analysis to verify
-        // invalid MAGO_SYMFONY_USER_CLASS and silent absent auto-discovery without breaking framing.
-        $repoRoot = getcwd();
-        $workerBin = $repoRoot . '/bin/mago-symfony-worker';
-        $wrapperCode = <<<PHP
-<?php
-\$cmd = [PHP_BINARY, '-d', 'xdebug.mode=off', '-d', 'pcov.enabled=0', %s];
-\$p = proc_open(\$cmd, [0 => STDIN, 1 => STDOUT, 2 => ['file', %s, 'w']], \$pipes);
-exit(\$p === false ? 1 : proc_close(\$p));
-PHP;
-        file_put_contents(
-            $wrapperWorker,
-            sprintf($wrapperCode, var_export($workerBin, true), var_export($stderrLog, true)),
-        );
 
         $secToml = (string) file_get_contents($repoRoot . '/tests/mago-security.toml');
         $secToml = str_replace(
@@ -1363,6 +1383,7 @@ PHP;
         @unlink($badJson);
         @unlink($stderrLog);
         @unlink($wrapperConfig);
+        @unlink($xmlWrapperConfig);
         @unlink($wrapperWorker);
         @rmdir($tmpDir);
     }

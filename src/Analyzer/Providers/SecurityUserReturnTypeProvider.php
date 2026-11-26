@@ -12,6 +12,8 @@ use Mago\Sdk\Analyzer\Type;
 /**
  * Narrows Symfony Security getUser() return types to a configured UserInterface
  * implementation when MAGO_SYMFONY_USER_CLASS is explicitly set.
+ *
+ * @internal
  */
 final class SecurityUserReturnTypeProvider implements MethodReturnTypeProvider
 {

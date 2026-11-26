@@ -17,6 +17,8 @@ use Mago\Sdk\Analyzer\Type\NamedObjectType;
  * NodeDefinition, which has no children(). Symfony returns the concrete
  * `*NodeDefinition` matching the TreeBuilder's `$type` argument (defaulting to
  * `ArrayNodeDefinition`), with the TreeBuilder itself as parent.
+ *
+ * @internal
  */
 final class RootNodeReturnTypeProvider implements MethodReturnTypeProvider
 {

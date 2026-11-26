@@ -14,6 +14,8 @@ use XMLReader;
  *
  * @phpstan-type ServiceFactory array{kind: 'method', class: string, method: string}|array{kind: 'function', function: string}
  * @phpstan-type ParameterDescriptor array{kind: string, value?: mixed, items?: array<int|string, mixed>, name?: string, type?: string}
+ *
+ * @internal
  */
 final class ContainerXmlLoader
 {

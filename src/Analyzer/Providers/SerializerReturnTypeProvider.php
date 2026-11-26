@@ -19,6 +19,8 @@ use Mago\Sdk\Analyzer\Type\ScalarTypeKind;
  * Resolves the $type argument of SerializerInterface::deserialize() and
  * DenormalizerInterface::denormalize() (including 'Foo[]' and 'Foo[][]' array notation)
  * to concrete object or array types.
+ *
+ * @internal
  */
 final class SerializerReturnTypeProvider implements MethodReturnTypeProvider
 {

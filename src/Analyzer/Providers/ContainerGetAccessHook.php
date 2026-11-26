@@ -24,6 +24,8 @@ use Mago\Sdk\Syntax\SourceFile;
  *
  * Skips ServiceLocator, ContainerBuilder, TestContainer, and PHPUnit TestCase subclasses
  * where private or test-only services are legitimately accessible.
+ *
+ * @internal
  */
 final class ContainerGetAccessHook implements MethodCallAnalysisHook
 {

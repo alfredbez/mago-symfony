@@ -13,6 +13,8 @@ use Mago\Sdk\Analyzer\Type\ScalarTypeKind;
 
 /**
  * Narrows ResponseHeaderBag::getCookies($format) based on COOKIES_FLAT vs COOKIES_ARRAY.
+ *
+ * @internal
  */
 final class ResponseHeaderBagCookiesReturnTypeProvider implements MethodReturnTypeProvider
 {

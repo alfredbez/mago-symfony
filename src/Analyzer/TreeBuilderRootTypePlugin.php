@@ -13,6 +13,8 @@ use Mago\Sdk\Analyzer\PluginRegistry;
 /**
  * Types `TreeBuilder::getRootNode()` using call-span root-type indexing without disabling
  * provider memoization on the main Symfony plugin.
+ *
+ * @internal
  */
 final class TreeBuilderRootTypePlugin implements Plugin
 {

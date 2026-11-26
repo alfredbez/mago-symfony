@@ -18,6 +18,8 @@ use Mago\Sdk\Syntax\SourceFile;
 /**
  * Validates Symfony Console Command configure() declarations and literal
  * $input->getArgument() / $input->getOption() calls against those declarations.
+ *
+ * @internal
  */
 final class ConsoleCommandArgumentsHook implements ClassLikeAnalysisHook
 {

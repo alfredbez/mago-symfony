@@ -26,6 +26,14 @@ if ($autoload === null) {
     exit(1);
 }
 
+ini_set('display_errors', 'stderr');
+
 require $autoload;
 
-(new \Mago\Sdk\Worker(\AlfredBez\MagoSymfony\SymfonyExtension::create()))->run();
+try {
+    (new \Mago\Sdk\Worker(\AlfredBez\MagoSymfony\SymfonyExtension::create()))->run();
+} catch (\Throwable $exception) {
+    fwrite(STDERR, $exception->getMessage() . "\n");
+    fflush(STDERR);
+    exit(1);
+}

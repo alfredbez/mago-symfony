@@ -6,6 +6,31 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-11-26
+
+First stable release targeting PHP `8.1` through `8.6`, Mago `^1.60.2` (verified on `1.60.2` and `1.61.0`), and Symfony `^6.4 || ^7.0`.
+
+### Added
+
+- `Symfony\Component\Console\Command\Command::initialize()` class initializer support for `check-property-initialization = true`.
+- Property initialization support for non-readonly public writable properties carrying `#[Symfony\Contracts\Service\Attribute\Required]` (`AutowireRequiredPropertiesPass`), while keeping private, protected, readonly, static, and non-`#[Required]` properties checked.
+- Method-level Symfony entry points for `find-unused-definitions = true`: method attributes (`#[Route]`, `#[AsEventListener]`, `#[AsMessageHandler]`, `#[Callback]`, `#[Required]`) and standard lifecycle methods on `Command`, `AbstractType`, `ConstraintValidator`, `Voter`, `ConfigurationInterface`, `ExtensionInterface`, `CompilerPassInterface`, `EventSubscriberInterface`, and `ServiceSubscriberInterface`.
+- Explicit PHP extension requirements (`ext-dom`, `ext-libxml`, `ext-tokenizer`, `ext-xmlreader`) in `composer.json`.
+- Compatibility and SemVer policy in `README.md`, `@internal` markers on internal analyzer plugins and providers, and `[extension-hosts.symfony] environment` configuration docs.
+- Bounded self-analysis gate (`mago-self.toml` and `tools/self-analyze-gate.php`) and floor-compatible PHP `8.1`/`8.2` plus pinned Mago `1.60.2` and `1.61.0` CI lanes.
+
+### Changed
+
+- Explicitly configured invalid `MAGO_SYMFONY_CONTAINER_XML` or `MAGO_SYMFONY_CONTAINER_MAP` paths now report a clear error to stderr and fail worker registration cleanly without corrupting the worker stdout protocol. Invalid `MAGO_SYMFONY_USER_CLASS` values now warn on stderr while leaving `getUser()` unnarrowed. Absent auto-discovery files remain silent.
+- `tools/corpus-run.php` runs the production `bin/mago-symfony-worker` binary with Xdebug and PCOV disabled.
+
+### Fixed
+
+- `SerializerInterface::deserialize()` and `DenormalizerInterface::denormalize()` resolve non-literal `class-string<T>` type arguments to `T`.
+- `Request::getPreferredLanguage()` narrows keyed arrays containing a required `0` string entry to `string` instead of reading a non-existent SDK property.
+- `TreeBuilderReturnIssueFilter` suppresses `ArrayNodeDefinition<TreeBuilder<...>>` vs `ArrayNodeDefinition<null>` parent mismatches when the enclosing method or function has a proven unparameterized native `: ArrayNodeDefinition` return type, while keeping explicit `@return ArrayNodeDefinition<null>`, inherited generic mismatches, wrong concrete node classes, and conditional rebindings reported.
+- `TreeBuilderRootNodeIndex` resolves workspace-relative files when the worker runs from a subdirectory containing a Mago config file.
+
 ## [0.1.3] - 2026-11-25
 
 ### Fixed

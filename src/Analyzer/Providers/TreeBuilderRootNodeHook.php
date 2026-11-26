@@ -19,6 +19,8 @@ use Mago\Sdk\Syntax\SourceFile;
 /**
  * Checks calls on `TreeBuilder::getRootNode()` when the TreeBuilder uses a
  * non-array root node type such as `'scalar'` or `'boolean'`.
+ *
+ * @internal
  */
 final class TreeBuilderRootNodeHook implements MethodCallAnalysisHook
 {

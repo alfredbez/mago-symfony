@@ -18,6 +18,8 @@ use RuntimeException;
  *
  * @phpstan-import-type ServiceFactory from ContainerXmlLoader
  * @phpstan-import-type ParameterDescriptor from ContainerXmlLoader
+ *
+ * @internal
  */
 final class ServiceClassMap
 {

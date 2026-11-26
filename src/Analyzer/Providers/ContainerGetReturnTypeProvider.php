@@ -23,6 +23,8 @@ use Mago\Sdk\Analyzer\Type\SimpleAtomicTypeKind;
  * Two sources recover it:
  * - a literal class-string id, which names the service class directly
  * - a service map for string ids such as "doctrine" or "router"
+ *
+ * @internal
  */
 final class ContainerGetReturnTypeProvider implements MethodReturnTypeProvider
 {

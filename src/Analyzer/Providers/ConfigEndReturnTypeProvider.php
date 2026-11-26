@@ -26,6 +26,8 @@ use Mago\Sdk\Analyzer\Type\SimpleAtomicTypeKind;
  * - `NodeDefinition::validate()` / `beforeNormalization()` return `ExprBuilder` with the node as parent.
  * - `end()` on `NodeDefinition`, `NodeBuilder`, `ExprBuilder`, or `MergeBuilder` pops the tracked
  *   parent type (or returns `null` past an unparented root node).
+ *
+ * @internal
  */
 final class ConfigEndReturnTypeProvider implements MethodReturnTypeProvider
 {

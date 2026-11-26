@@ -1,44 +1,100 @@
-name: tests
+name: ci
 
 on:
   push:
   pull_request:
 
 jobs:
-  suite:
-    name: PHP ${{ matrix.php }} / Symfony ${{ matrix.symfony }} / Mago ${{ matrix.mago }}
+  tests:
+    name: PHP ${{ matrix.php }} / Symfony ${{ matrix.symfony }} / Mago ${{ matrix.mago }} / ${{ matrix.suite }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        php: ["8.3", "8.4"]
-        symfony: ["6.4", "7.0"]
-        mago: ["latest"]
         include:
+          - php: "8.1"
+            symfony: "6.4"
+            mago: "1.60.2"
+            suite: floor
+          - php: "8.1"
+            symfony: "6.4"
+            mago: "1.61.0"
+            suite: floor
+          - php: "8.2"
+            symfony: "6.4"
+            mago: "1.60.2"
+            suite: floor
+          - php: "8.2"
+            symfony: "6.4"
+            mago: "1.61.0"
+            suite: floor
           - php: "8.3"
             symfony: "6.4"
             mago: "1.60.2"
+            suite: full
+          - php: "8.3"
+            symfony: "6.4"
+            mago: "1.61.0"
+            suite: full
+          - php: "8.3"
+            symfony: "7.0"
+            mago: "1.60.2"
+            suite: full
+          - php: "8.3"
+            symfony: "7.0"
+            mago: "1.61.0"
+            suite: full
+          - php: "8.4"
+            symfony: "6.4"
+            mago: "1.61.0"
+            suite: full
+          - php: "8.4"
+            symfony: "6.4"
+            mago: "latest"
+            suite: full
           - php: "8.4"
             symfony: "7.0"
             mago: "1.60.2"
+            suite: full
+          - php: "8.4"
+            symfony: "7.0"
+            mago: "1.61.0"
+            suite: full
+          - php: "8.4"
+            symfony: "7.0"
+            mago: "latest"
+            suite: full
+          - php: "8.5"
+            symfony: "7.0"
+            mago: "1.61.0"
+            suite: full
+          - php: "8.5"
+            symfony: "7.0"
+            mago: "latest"
+            suite: full
     steps:
       - uses: actions/checkout@v4
+
       - uses: shivammathur/setup-php@v2
         with:
           php-version: ${{ matrix.php }}
           coverage: none
-          extensions: curl, mbstring, xml, zip
+          extensions: curl, dom, libxml, mbstring, tokenizer, xml, xmlreader, zip
           tools: composer
+
       - name: Validate Composer metadata
         run: composer validate --strict
+
       - name: Install Symfony 7 with latest compatible Mago
         if: matrix.symfony == '7.0' && matrix.mago == 'latest'
         run: |
           composer install --no-interaction --prefer-dist --no-progress
           composer update --no-interaction --prefer-dist --no-progress carthage-software/mago
-      - name: Install Symfony 7 with lowest supported Mago
+
+      - name: Install Symfony 7 with pinned Mago
         if: matrix.symfony == '7.0' && matrix.mago != 'latest'
         run: composer update --no-interaction --prefer-dist --no-progress --with="carthage-software/mago:${{ matrix.mago }}"
+
       - name: Install Symfony 6.4 dependencies
         if: matrix.symfony == '6.4'
         run: |
@@ -57,16 +113,62 @@ jobs:
             "symfony/security-core:^6.4" \
             "symfony/serializer:^6.4" \
             "symfony/validator:^6.4"
+
       - name: Resolve latest compatible Mago on Symfony 6.4
         if: matrix.symfony == '6.4' && matrix.mago == 'latest'
         run: composer update --no-interaction --prefer-dist --no-progress carthage-software/mago
-      - name: Pin lowest supported Mago on Symfony 6.4
+
+      - name: Pin Mago on Symfony 6.4
         if: matrix.symfony == '6.4' && matrix.mago != 'latest'
         run: composer update --no-interaction --prefer-dist --no-progress --with="carthage-software/mago:${{ matrix.mago }}"
+
+      - name: Pre-warm Mago
+        run: vendor/bin/mago --version
+
       - name: Verify installed Mago version
         if: matrix.mago != 'latest'
         run: test "$(php vendor/bin/mago --version)" = "mago ${{ matrix.mago }}"
+
+      - name: Syntax-check sources
+        run: find src bin -name '*.php' -print0 | xargs -0 -n1 php -l
+
+      - name: Validate extension
+        run: vendor/bin/mago extension validate
+
       - name: Validate conformance catalog
         run: php tests/check-spec.php
+
       - name: Run runtime and analyzer tests
+        if: matrix.suite == 'full'
         run: composer test
+
+      - name: Run floor analyzer checks
+        if: matrix.suite == 'floor'
+        run: |
+          MAGO_SYMFONY_CONTAINER_MAP=tests/container-map.json vendor/bin/mago analyze --reporting-format=json > .mago-floor-out.json || true
+          php -r '$d = json_decode((string) file_get_contents(".mago-floor-out.json"), true); if (!is_array($d) || !isset($d["issues"])) { fwrite(STDERR, "Invalid JSON output\n"); exit(1); }'
+
+  self-analysis:
+    name: Self-analysis
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.4"
+          coverage: none
+          extensions: curl, dom, libxml, mbstring, tokenizer, xml, xmlreader, zip
+          tools: composer
+
+      - name: Install dependencies
+        run: composer update --no-interaction --prefer-dist --no-progress --with="carthage-software/mago:1.61.0"
+
+      - name: Pre-warm Mago
+        run: vendor/bin/mago --version
+
+      - name: Analyze src and bin
+        run: vendor/bin/mago --config mago-self.toml analyze --no-extensions --reporting-format=json > .mago-self-report.json || true
+
+      - name: Enforce self-analysis baseline
+        run: php tools/self-analyze-gate.php .mago-self-report.json

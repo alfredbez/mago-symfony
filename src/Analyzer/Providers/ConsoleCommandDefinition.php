@@ -13,6 +13,8 @@ use Mago\Sdk\Syntax\SourceFile;
 /**
  * Parsed Console Command::configure() declarations for arguments and options,
  * including constant mode bitmasks, literal defaults, and invalid definition diagnostics.
+ *
+ * @internal
  */
 final class ConsoleCommandDefinition
 {

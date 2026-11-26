@@ -25,6 +25,8 @@ use Mago\Sdk\Analyzer\Type\ScalarTypeKind;
  * loaded container XML or JSON metadata.
  *
  * @phpstan-import-type ParameterDescriptor from ContainerXmlLoader
+ *
+ * @internal
  */
 final class ParameterReturnTypeProvider implements MethodReturnTypeProvider
 {

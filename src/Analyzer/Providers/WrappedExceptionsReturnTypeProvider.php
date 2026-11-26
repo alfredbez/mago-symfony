@@ -18,6 +18,8 @@ use Mago\Sdk\Analyzer\Type\ScalarTypeKind;
  * Narrows WrappedExceptionsInterface::getWrappedExceptions($class) to
  * array<array-key, T> when a non-empty class or interface name is supplied
  * (closing Symfony 6.4's untemplated Throwable[] return type).
+ *
+ * @internal
  */
 final class WrappedExceptionsReturnTypeProvider implements MethodReturnTypeProvider
 {

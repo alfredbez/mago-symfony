@@ -20,9 +20,7 @@
                 "less-specific-return-statement": 36,
                 "non-existent-method": 320
             },
-            "added_by_code": {
-                "invalid-return-statement": 36
-            }
+            "added_by_code": []
         },
         "symfony": {
             "ref": "v7.2.9",
