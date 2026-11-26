@@ -160,8 +160,10 @@ $expected = [
                 'non-existent-method' => 32,
             ]
             : [
-                'less-specific-return-statement' => 3,
-                'non-existent-method' => 4,
+                'less-specific-return-statement' => 4,
+                'non-existent-method' => 9,
+                'nullable-return-statement' => 1,
+                'possible-method-access-on-null' => 5,
             ],
         'tests/fixtures/TreeBuilderReturnPathsNegative.php' => $isSymfony7
             ? [
