@@ -972,7 +972,7 @@ $lifecycleWithout = analyze(true, 'tests/mago-lifecycle.toml');
 $failures += assertHistograms('lifecycle with extension', $lifecycleWith, [
     'tests/fixtures-lifecycle/LifecycleAndEntryPoints.php' => [],
     'tests/fixtures-lifecycle/LifecycleAndEntryPointsNegative.php' => [
-        'uninitialized-property' => 4,
+        'uninitialized-property' => 6,
         'unused-method' => 1,
     ],
 ]);
@@ -984,13 +984,15 @@ $failures += assertHistograms('lifecycle --no-extensions', $lifecycleWithout, [
         'unused-method' => 5,
     ],
     'tests/fixtures-lifecycle/LifecycleAndEntryPointsNegative.php' => [
-        'uninitialized-property' => 4,
+        'uninitialized-property' => 6,
         'unused-method' => 1,
     ],
 ]);
 $failures += assertMessageCount('lifecycle with extension', $lifecycleWith, 'tests/fixtures-lifecycle/LifecycleAndEntryPointsNegative.php', 'uninitialized-property', '$privateRequired', 1);
 $failures += assertMessageCount('lifecycle with extension', $lifecycleWith, 'tests/fixtures-lifecycle/LifecycleAndEntryPointsNegative.php', 'uninitialized-property', '$protectedRequired', 1);
 $failures += assertMessageCount('lifecycle with extension', $lifecycleWith, 'tests/fixtures-lifecycle/LifecycleAndEntryPointsNegative.php', 'uninitialized-property', '$readonlyRequired', 1);
+$failures += assertMessageCount('lifecycle with extension', $lifecycleWith, 'tests/fixtures-lifecycle/LifecycleAndEntryPointsNegative.php', 'uninitialized-property', '$unionRequired', 1);
+$failures += assertMessageCount('lifecycle with extension', $lifecycleWith, 'tests/fixtures-lifecycle/LifecycleAndEntryPointsNegative.php', 'uninitialized-property', '$intersectionRequired', 1);
 $failures += assertMessageCount('lifecycle with extension', $lifecycleWith, 'tests/fixtures-lifecycle/LifecycleAndEntryPointsNegative.php', 'uninitialized-property', '$plainPublic', 1);
 $failures += assertMessageCount('lifecycle with extension', $lifecycleWith, 'tests/fixtures-lifecycle/LifecycleAndEntryPointsNegative.php', 'unused-method', 'genuinelyUnusedHelper', 1);
 
@@ -1232,6 +1234,8 @@ function verifyConfigErrorBehavior(array $magoCommand): int
     $badXml = $tmpDir . '/broken.xml';
     $wrongRootXml = $tmpDir . '/wrong-root.xml';
     $badJson = $tmpDir . '/broken.json';
+    $emptyArrayJson = $tmpDir . '/empty-array.json';
+    $numericKeyJson = $tmpDir . '/numeric-key.json';
     $stderrLog = $tmpDir . '/worker-stderr.log';
     $wrapperConfig = $tmpDir . '/security-stderr.toml';
     $xmlWrapperConfig = $tmpDir . '/xml-stderr.toml';
@@ -1240,6 +1244,8 @@ function verifyConfigErrorBehavior(array $magoCommand): int
     file_put_contents($badXml, "<container><services><service id=\"a\"></container>");
     file_put_contents($wrongRootXml, "<not-a-container/>");
     file_put_contents($badJson, "{invalid json");
+    file_put_contents($emptyArrayJson, "[]");
+    file_put_contents($numericKeyJson, '{"0":"stdClass"}');
 
     try {
         $repoRoot = getcwd();
@@ -1298,6 +1304,11 @@ PHP;
                 'label' => 'malformed MAGO_SYMFONY_CONTAINER_MAP',
                 'env' => ['MAGO_SYMFONY_CONTAINER_MAP' => $badJson],
                 'needle' => 'MAGO_SYMFONY_CONTAINER_MAP contains malformed JSON',
+            ],
+            [
+                'label' => 'array root MAGO_SYMFONY_CONTAINER_MAP',
+                'env' => ['MAGO_SYMFONY_CONTAINER_MAP' => $emptyArrayJson],
+                'needle' => 'MAGO_SYMFONY_CONTAINER_MAP must decode to a JSON object',
             ],
         ];
 
@@ -1366,6 +1377,20 @@ PHP;
             }
         }
 
+        // Numeric-key JSON object map must be accepted as a valid JSON object.
+        @unlink($stderrLog);
+        putenv('MAGO_SYMFONY_CONTAINER_MAP=' . $numericKeyJson);
+        $numRes = run([...$magoCommand, '--config', $wrapperConfig, '--workspace', $repoRoot, 'analyze', '--reporting-format=json']);
+        putenv('MAGO_SYMFONY_CONTAINER_MAP');
+        $numDecoded = json_decode($numRes['stdout'], true);
+        $numStderr = is_file($stderrLog) ? trim((string) file_get_contents($stderrLog)) : '';
+        if (is_array($numDecoded) && isset($numDecoded['issues']) && $numStderr === '') {
+            fwrite(STDOUT, "ok  config numeric-key JSON object MAGO_SYMFONY_CONTAINER_MAP\n");
+        } else {
+            $failures++;
+            fwrite(STDERR, "FAIL config numeric-key JSON object MAGO_SYMFONY_CONTAINER_MAP (stderr: {$numStderr})\n");
+        }
+
         // Absent auto-discovery stays silent and exits cleanly.
         @unlink($stderrLog);
         $silentRes = run([...$magoCommand, '--config', $wrapperConfig, '--workspace', $repoRoot, 'analyze', '--reporting-format=json']);
@@ -1381,6 +1406,8 @@ PHP;
         @unlink($badXml);
         @unlink($wrongRootXml);
         @unlink($badJson);
+        @unlink($emptyArrayJson);
+        @unlink($numericKeyJson);
         @unlink($stderrLog);
         @unlink($wrapperConfig);
         @unlink($xmlWrapperConfig);

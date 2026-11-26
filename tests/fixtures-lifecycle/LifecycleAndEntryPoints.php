@@ -69,9 +69,12 @@ final class RequiredPropertyService
     #[Required]
     public string $injectedName;
 
+    #[Required]
+    public ?\stdClass $nullableInjected;
+
     public function readInjected(): string
     {
-        return $this->injectedName;
+        return $this->nullableInjected !== null ? $this->injectedName : $this->injectedName;
     }
 }
 

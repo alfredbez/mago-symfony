@@ -131,14 +131,21 @@ final class ServiceClassMap
             );
         }
 
-        $decoded = json_decode($raw, true);
+        $decodedObject = json_decode($raw, false);
         if (json_last_error() !== JSON_ERROR_NONE) {
             throw new RuntimeException(
                 "mago-symfony: {$envVar} contains malformed JSON (" . json_last_error_msg() . "): {$path}",
             );
         }
 
-        if (!is_array($decoded) || ($decoded !== [] && array_is_list($decoded))) {
+        if (!$decodedObject instanceof \stdClass) {
+            throw new RuntimeException(
+                "mago-symfony: {$envVar} must decode to a JSON object: {$path}",
+            );
+        }
+
+        $decoded = json_decode($raw, true);
+        if (!is_array($decoded)) {
             throw new RuntimeException(
                 "mago-symfony: {$envVar} must decode to a JSON object: {$path}",
             );

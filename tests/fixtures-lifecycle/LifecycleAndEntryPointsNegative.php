@@ -17,6 +17,12 @@ final class RequiredPropertyNegative
     #[Required]
     public readonly string $readonlyRequired;
 
+    #[Required]
+    public \stdClass|\Countable $unionRequired;
+
+    #[Required]
+    public \Iterator&\Countable $intersectionRequired;
+
     public string $plainPublic;
 
     public function __construct()
@@ -25,6 +31,10 @@ final class RequiredPropertyNegative
 
     public function readAll(): string
     {
+        $u = $this->unionRequired;
+        $i = $this->intersectionRequired;
+        unset($u, $i);
+
         return $this->privateRequired
             . $this->protectedRequired
             . $this->readonlyRequired
