@@ -1,0 +1,15 @@
+version = "1"
+php-version = "8.3"
+
+[source]
+paths = ["tests/fixtures-treebuilder-global"]
+includes = ["tests/stubs-treebuilder-untemplated"]
+
+[analyzer]
+find-unused-definitions = false
+find-unused-expressions = false
+check-property-initialization = false
+
+[extension-hosts.symfony]
+command = ["php", "worker.php"]
+workers = 1

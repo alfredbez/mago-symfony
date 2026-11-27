@@ -6,6 +6,7 @@ namespace AlfredBez\MagoSymfony\Analyzer\Providers;
 
 use Mago\Sdk\Analyzer\BeforeAnalysisContext;
 use Mago\Sdk\Analyzer\BeforeAnalysisHook;
+use Mago\Sdk\Analyzer\Metadata\MetadataFlags;
 use Mago\Sdk\Span;
 
 use function array_key_exists;
@@ -15,6 +16,7 @@ use function count;
 use function dirname;
 use function file_get_contents;
 use function get_declared_classes;
+use function get_defined_functions;
 use function getcwd;
 use function is_array;
 use function is_file;
@@ -182,9 +184,6 @@ final class TreeBuilderRootNodeIndex implements BeforeAnalysisHook
 
         $classQuery = [];
         foreach ($context->codebase->getClassNames() as $name) {
-            if (!str_contains($name, '\\')) {
-                continue;
-            }
             $lower = strtolower($name);
             if (isset($internalClasses[$lower]) || self::isStubNamespace($lower)) {
                 continue;
@@ -195,7 +194,7 @@ final class TreeBuilderRootNodeIndex implements BeforeAnalysisHook
         $files = [];
         if ($classQuery !== []) {
             foreach ($context->codebase->getMultipleClasses($classQuery) as $meta) {
-                if ($meta !== null) {
+                if ($meta !== null && $meta->flags->contains(MetadataFlags::USER_DEFINED)) {
                     $file = $meta->location->file;
                     if (is_string($file) && $file !== '' && !str_contains($file, '/vendor/') && !str_starts_with($file, 'vendor/')) {
                         $files[$file] = true;
@@ -204,12 +203,15 @@ final class TreeBuilderRootNodeIndex implements BeforeAnalysisHook
             }
         }
 
+        $internalFunctions = [];
+        foreach (get_defined_functions()['internal'] as $internalFn) {
+            $internalFunctions[strtolower($internalFn)] = true;
+        }
+
         $fnQuery = [];
         foreach ($context->codebase->getFunctionNames() as $fnName) {
-            if (!str_contains($fnName, '\\')) {
-                continue;
-            }
-            if (self::isStubNamespace(strtolower($fnName))) {
+            $lower = strtolower($fnName);
+            if (isset($internalFunctions[$lower]) || self::isStubNamespace($lower)) {
                 continue;
             }
             $fnQuery[] = $fnName;
@@ -217,7 +219,7 @@ final class TreeBuilderRootNodeIndex implements BeforeAnalysisHook
 
         if ($fnQuery !== []) {
             foreach ($context->codebase->getMultipleFunctions($fnQuery) as $fnMeta) {
-                if ($fnMeta !== null) {
+                if ($fnMeta !== null && $fnMeta->flags->contains(MetadataFlags::USER_DEFINED)) {
                     $file = $fnMeta->location->file;
                     if (is_string($file) && $file !== '' && !str_contains($file, '/vendor/') && !str_starts_with($file, 'vendor/')) {
                         $files[$file] = true;

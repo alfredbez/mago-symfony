@@ -23,13 +23,18 @@ use function ltrim;
 use function max;
 use function min;
 use function preg_match;
+use function preg_match_all;
+use function preg_replace;
 use function str_contains;
+use function str_starts_with;
 use function strlen;
 use function strtolower;
 use function substr;
 use function token_get_all;
+use function trim;
 
 use const T_AS;
+use const T_ATTRIBUTE;
 use const T_BREAK;
 use const T_CASE;
 use const T_CATCH;
@@ -75,6 +80,7 @@ use const T_NAME_FULLY_QUALIFIED;
 use const T_NAME_QUALIFIED;
 use const T_NS_SEPARATOR;
 use const T_RETURN;
+use const T_STATIC;
 use const T_STRING;
 use const T_SWITCH;
 use const T_THROW;
@@ -97,10 +103,10 @@ use const T_WHITESPACE;
 final class TreeBuilderReturnIssueFilter implements IssueFilterHook
 {
     private const PATTERN = '/expected `Symfony\\\\Component\\\\Config\\\\Definition\\\\Builder\\\\TreeBuilder<string\(\'([a-z]+)\'\)>`, but found `Symfony\\\\Component\\\\Config\\\\Definition\\\\Builder\\\\TreeBuilder<string>`/';
-    private const ROOT_NODE_RETURN_PATTERN = '/^Invalid return type for function `([^`]+)`: expected `Symfony\\\\Component\\\\Config\\\\Definition\\\\Builder\\\\ArrayNodeDefinition<null>`, but found `Symfony\\\\Component\\\\Config\\\\Definition\\\\Builder\\\\ArrayNodeDefinition<Symfony\\\\Component\\\\Config\\\\Definition\\\\Builder\\\\TreeBuilder(?:<[^>]+>)?>`\.$/';
+    private const CONCRETE_ROOT_NODE_CLASSES = 'ArrayNodeDefinition|ScalarNodeDefinition|BooleanNodeDefinition|IntegerNodeDefinition|FloatNodeDefinition|EnumNodeDefinition|VariableNodeDefinition|StringNodeDefinition';
+    private const ROOT_NODE_RETURN_PATTERN = '/^Invalid return type for function `([^`]+)`: expected `Symfony\\\\Component\\\\Config\\\\Definition\\\\Builder\\\\(' . self::CONCRETE_ROOT_NODE_CLASSES . ')<null>`, but found `Symfony\\\\Component\\\\Config\\\\Definition\\\\Builder\\\\\2<Symfony\\\\Component\\\\Config\\\\Definition\\\\Builder\\\\TreeBuilder(?:<[^>]+>)?>`\.$/';
     private const TREE_BUILDER_NS = 'symfony\\component\\config\\definition\\builder';
     private const TREE_BUILDER_FQN = self::TREE_BUILDER_NS . '\\treebuilder';
-    private const ARRAY_NODE_DEFINITION_FQN = self::TREE_BUILDER_NS . '\\arraynodedefinition';
 
     private const KNOWN_ROOT_TYPES = [
         'array' => true,
@@ -142,11 +148,25 @@ final class TreeBuilderReturnIssueFilter implements IssueFilterHook
     public function filterIssue(IssueFilterContext $context): IssueFilterDecision
     {
         $message = $context->issue->message;
-        if (str_contains($message, 'ArrayNodeDefinition<null>')) {
+        $primarySpan = null;
+        foreach ($context->issue->annotations as $annotation) {
+            if ($annotation->kind === AnnotationKind::Primary) {
+                $primarySpan = $annotation->span;
+                break;
+            }
+        }
+        $primarySpan ??= $context->issue->annotations[0]->span ?? null;
+
+        if (str_contains($message, 'NodeDefinition<null>')) {
             $rootMatch = [];
             if (
                 preg_match(self::ROOT_NODE_RETURN_PATTERN, $message, $rootMatch) === 1
-                && $this->isProvenUnparameterizedArrayNodeReturnTarget($context, $rootMatch[1])
+                && $this->isProvenUnparameterizedNodeReturnTarget(
+                    $context,
+                    $rootMatch[1],
+                    self::TREE_BUILDER_NS . '\\' . strtolower($rootMatch[2]),
+                    $primarySpan?->start,
+                )
             ) {
                 return IssueFilterDecision::Remove;
             }
@@ -164,14 +184,6 @@ final class TreeBuilderReturnIssueFilter implements IssueFilterHook
         }
 
         $expectedRootType = strtolower($match[1]);
-        $primarySpan = null;
-        foreach ($context->issue->annotations as $annotation) {
-            if ($annotation->kind === AnnotationKind::Primary) {
-                $primarySpan = $annotation->span;
-                break;
-            }
-        }
-        $primarySpan ??= $context->issue->annotations[0]->span ?? null;
         if ($primarySpan === null) {
             return IssueFilterDecision::Keep;
         }
@@ -183,8 +195,12 @@ final class TreeBuilderReturnIssueFilter implements IssueFilterHook
             : IssueFilterDecision::Keep;
     }
 
-    private function isProvenUnparameterizedArrayNodeReturnTarget(IssueFilterContext $context, string $symbol): bool
-    {
+    private function isProvenUnparameterizedNodeReturnTarget(
+        IssueFilterContext $context,
+        string $symbol,
+        string $expectedNodeFqn,
+        ?int $primaryOffset,
+    ): bool {
         if (str_contains($symbol, '::')) {
             [$className, $methodName] = explode('::', $symbol, 2);
             if ($className === '' || $methodName === '') {
@@ -197,7 +213,7 @@ final class TreeBuilderReturnIssueFilter implements IssueFilterHook
                 return false;
             }
 
-            if (!self::hasUnparameterizedArrayNodeReturn($methodMeta)) {
+            if (!self::hasUnparameterizedNodeReturn($methodMeta, $expectedNodeFqn)) {
                 return false;
             }
 
@@ -217,7 +233,12 @@ final class TreeBuilderReturnIssueFilter implements IssueFilterHook
                 }
 
                 $ancestorMethod = $context->codebase->getMethod($ancestor, $methodName);
-                if ($ancestorMethod !== null && $ancestorMethod->returnType?->fromDocblock === true) {
+                if (
+                    $ancestorMethod !== null
+                    && $ancestorMethod->returnType !== null
+                    && $ancestorMethod->returnType->fromDocblock
+                    && !self::isUnparameterizedNodeType($ancestorMethod->returnType->type, $expectedNodeFqn)
+                ) {
                     return false;
                 }
 
@@ -232,30 +253,37 @@ final class TreeBuilderReturnIssueFilter implements IssueFilterHook
         }
 
         $functionMeta = $context->codebase->getFunction($symbol);
-        if ($functionMeta === null) {
-            return false;
+        if ($functionMeta !== null) {
+            return self::hasUnparameterizedNodeReturn($functionMeta, $expectedNodeFqn);
         }
 
-        return self::hasUnparameterizedArrayNodeReturn($functionMeta);
+        if (str_starts_with($symbol, '{closure:') && $primaryOffset !== null) {
+            return $this->isProvenUnparameterizedClosureReturn($context->contents, $primaryOffset, $expectedNodeFqn);
+        }
+
+        return false;
     }
 
-    private static function hasUnparameterizedArrayNodeReturn(FunctionLikeMetadata $metadata): bool
+    private static function hasUnparameterizedNodeReturn(FunctionLikeMetadata $metadata, string $expectedNodeFqn): bool
     {
-        $declared = $metadata->declaredReturnType;
         $effective = $metadata->returnType;
-        if ($declared === null || $effective === null) {
+        if ($effective === null) {
             return false;
         }
 
-        if ($effective->fromDocblock) {
+        if (!self::isUnparameterizedNodeType($effective->type, $expectedNodeFqn)) {
             return false;
         }
 
-        return self::isUnparameterizedArrayNodeType($declared->type)
-            && self::isUnparameterizedArrayNodeType($effective->type);
+        $declared = $metadata->declaredReturnType;
+        if (!$effective->fromDocblock && ($declared === null || !self::isUnparameterizedNodeType($declared->type, $expectedNodeFqn))) {
+            return false;
+        }
+
+        return true;
     }
 
-    private static function isUnparameterizedArrayNodeType(Type $type): bool
+    private static function isUnparameterizedNodeType(Type $type, string $expectedNodeFqn): bool
     {
         if (count($type->atomicTypes) !== 1) {
             return false;
@@ -264,8 +292,246 @@ final class TreeBuilderReturnIssueFilter implements IssueFilterHook
         $atomic = $type->atomicTypes[0];
 
         return $atomic instanceof NamedObjectType
-            && strtolower($atomic->name) === self::ARRAY_NODE_DEFINITION_FQN
+            && strtolower($atomic->name) === $expectedNodeFqn
             && $atomic->parameters === null;
+    }
+
+    private function isProvenUnparameterizedClosureReturn(
+        string $contents,
+        int $targetOffset,
+        string $expectedNodeFqn,
+    ): bool {
+        $rawTokens = token_get_all($contents);
+        /** @var list<array{id: int|string, text: string, start: int, end: int}> $tokens */
+        $tokens = [];
+        /** @var array<int, string> $docBeforeNonTrivia */
+        $docBeforeNonTrivia = [];
+        $pendingDoc = null;
+        $offset = 0;
+
+        foreach ($rawTokens as $tok) {
+            if (is_array($tok)) {
+                $len = strlen($tok[1]);
+                if ($tok[0] === T_DOC_COMMENT) {
+                    $pendingDoc = $tok[1];
+                } elseif ($tok[0] !== T_WHITESPACE && $tok[0] !== T_COMMENT) {
+                    $idx = count($tokens);
+                    if ($pendingDoc !== null) {
+                        $docBeforeNonTrivia[$idx] = $pendingDoc;
+                        $pendingDoc = null;
+                    }
+                    $tokens[] = ['id' => $tok[0], 'text' => $tok[1], 'start' => $offset, 'end' => $offset + $len];
+                }
+                $offset += $len;
+            } else {
+                $len = strlen($tok);
+                $idx = count($tokens);
+                if ($pendingDoc !== null) {
+                    $docBeforeNonTrivia[$idx] = $pendingDoc;
+                    $pendingDoc = null;
+                }
+                $tokens[] = ['id' => $tok, 'text' => $tok, 'start' => $offset, 'end' => $offset + $len];
+                $offset += $len;
+            }
+        }
+
+        $this->tokens = $tokens;
+        $this->collectImportsBefore($targetOffset);
+
+        $total = count($tokens);
+        $bestFnIdx = null;
+        $bestHeaderEnd = null;
+        $bestStartOffset = -1;
+
+        for ($i = 0; $i < $total; ++$i) {
+            $id = $tokens[$i]['id'];
+            if ($id === T_FUNCTION) {
+                $afterFn = $i + 1;
+                if (isset($tokens[$afterFn]) && TokenHelper::isAmpersand($tokens[$afterFn]['id'])) {
+                    ++$afterFn;
+                }
+                if (!isset($tokens[$afterFn]) || $tokens[$afterFn]['id'] !== '(') {
+                    continue;
+                }
+                $closeParen = $this->findMatching($afterFn, $total, '(', ')');
+                if ($closeParen === null) {
+                    continue;
+                }
+                $cursor = $closeParen + 1;
+                while ($cursor < $total && $tokens[$cursor]['id'] !== '{' && $tokens[$cursor]['id'] !== ';') {
+                    if ($tokens[$cursor]['id'] === '(') {
+                        $matched = $this->findMatching($cursor, $total, '(', ')');
+                        if ($matched === null) {
+                            break;
+                        }
+                        $cursor = $matched + 1;
+                        continue;
+                    }
+                    ++$cursor;
+                }
+                if ($cursor >= $total || $tokens[$cursor]['id'] !== '{') {
+                    continue;
+                }
+                $closeBrace = $this->findMatching($cursor, $total, '{', '}');
+                if ($closeBrace === null) {
+                    continue;
+                }
+                $startByte = $tokens[$cursor]['start'];
+                $endByte = $tokens[$closeBrace]['end'];
+                if ($startByte <= $targetOffset && $targetOffset <= $endByte && $startByte >= $bestStartOffset) {
+                    $bestStartOffset = $startByte;
+                    $bestFnIdx = $i;
+                    $bestHeaderEnd = $cursor;
+                }
+            } elseif ($id === T_FN) {
+                $arrow = $this->findArrowDoubleArrow($i, $total);
+                if ($arrow === null) {
+                    continue;
+                }
+                $exprEnd = $this->findArrowExprEnd($arrow + 1, $total);
+                $startByte = $tokens[$arrow]['end'];
+                $endByte = $tokens[$exprEnd - 1]['end'] ?? $startByte;
+                if ($startByte <= $targetOffset && $targetOffset <= $endByte && $startByte >= $bestStartOffset) {
+                    $bestStartOffset = $startByte;
+                    $bestFnIdx = $i;
+                    $bestHeaderEnd = $arrow;
+                }
+            }
+        }
+
+        if ($bestFnIdx === null || $bestHeaderEnd === null) {
+            return false;
+        }
+
+        $nativeMatches = $this->closureNativeReturnMatches($bestFnIdx, $bestHeaderEnd, $expectedNodeFqn);
+        $docblock = $this->findClosureDocblock($bestFnIdx, $docBeforeNonTrivia);
+        if ($docblock !== null && preg_match('/@return\b/', $docblock) === 1) {
+            return $this->docblockReturnMatchesUnparameterized($docblock, $expectedNodeFqn);
+        }
+
+        return $nativeMatches;
+    }
+
+    private function closureNativeReturnMatches(int $fnIdx, int $headerEnd, string $expectedNodeFqn): bool
+    {
+        $openParen = $this->findNext($fnIdx + 1, $headerEnd, '(');
+        if ($openParen === null) {
+            return false;
+        }
+        $closeParen = $this->findMatching($openParen, $headerEnd, '(', ')');
+        if ($closeParen === null) {
+            return false;
+        }
+
+        $cursor = $closeParen + 1;
+        if ($cursor < $headerEnd && $this->tokens[$cursor]['id'] === T_USE && $cursor + 1 < $headerEnd && $this->tokens[$cursor + 1]['id'] === '(') {
+            $useClose = $this->findMatching($cursor + 1, $headerEnd, '(', ')');
+            if ($useClose === null) {
+                return false;
+            }
+            $cursor = $useClose + 1;
+        }
+
+        if ($cursor >= $headerEnd || $this->tokens[$cursor]['id'] !== ':') {
+            return false;
+        }
+
+        $typeStart = $cursor + 1;
+        if ($headerEnd - $typeStart !== 1) {
+            return false;
+        }
+
+        $typeTok = $this->tokens[$typeStart];
+        if (
+            $typeTok['id'] !== T_STRING
+            && $typeTok['id'] !== T_NAME_QUALIFIED
+            && $typeTok['id'] !== T_NAME_FULLY_QUALIFIED
+        ) {
+            return false;
+        }
+
+        return $this->resolveClassFqn($typeTok['text'], $typeTok['id'] === T_NAME_FULLY_QUALIFIED) === $expectedNodeFqn;
+    }
+
+    /**
+     * @param array<int, string> $docBeforeNonTrivia
+     */
+    private function findClosureDocblock(int $fnIdx, array $docBeforeNonTrivia): ?string
+    {
+        $startIdx = $fnIdx;
+        if ($startIdx > 0 && $this->tokens[$startIdx - 1]['id'] === T_STATIC) {
+            --$startIdx;
+        }
+
+        while ($startIdx > 0 && $this->tokens[$startIdx - 1]['id'] === ']') {
+            $attrStart = $this->findMatchingAttrStart($startIdx - 1);
+            if ($attrStart === null) {
+                break;
+            }
+            $startIdx = $attrStart;
+        }
+
+        if (isset($docBeforeNonTrivia[$startIdx])) {
+            return $docBeforeNonTrivia[$startIdx];
+        }
+
+        if (
+            $startIdx >= 2
+            && $this->tokens[$startIdx - 1]['id'] === '='
+            && $this->tokens[$startIdx - 2]['id'] === T_VARIABLE
+            && isset($docBeforeNonTrivia[$startIdx - 2])
+        ) {
+            return $docBeforeNonTrivia[$startIdx - 2];
+        }
+
+        return null;
+    }
+
+    private function findMatchingAttrStart(int $closeBracketIdx): ?int
+    {
+        $depth = 0;
+        for ($i = $closeBracketIdx; $i >= 0; --$i) {
+            $id = $this->tokens[$i]['id'];
+            if ($id === ']') {
+                ++$depth;
+            } elseif ($id === '[' || $id === T_ATTRIBUTE) {
+                --$depth;
+                if ($depth === 0) {
+                    return $id === T_ATTRIBUTE ? $i : null;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private function docblockReturnMatchesUnparameterized(string $docblock, string $expectedNodeFqn): bool
+    {
+        $matches = [];
+        if (preg_match_all('/@return[ \t]+([^\r\n]+)/', $docblock, $matches) < 1) {
+            return false;
+        }
+
+        foreach ($matches[1] as $rawLine) {
+            $line = trim(preg_replace('/\*\/\s*$/', '', $rawLine) ?? $rawLine);
+            if ($line === '') {
+                return false;
+            }
+            $typeMatch = [];
+            if (preg_match('/^([\\\\A-Za-z_\x80-\xff][\\\\A-Za-z0-9_\x80-\xff]*)(.*)$/', $line, $typeMatch) !== 1) {
+                return false;
+            }
+            $rawName = $typeMatch[1];
+            $rest = ltrim($typeMatch[2]);
+            if ($rest !== '' && ($rest[0] === '<' || $rest[0] === '|' || $rest[0] === '&' || $rest[0] === '[')) {
+                return false;
+            }
+            if ($this->resolveClassFqn($rawName, str_starts_with($rawName, '\\')) !== $expectedNodeFqn) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private function resolveDominatingReturnRootType(string $contents, int $targetOffset): ?string
@@ -568,7 +834,7 @@ final class TreeBuilderReturnIssueFilter implements IssueFilterHook
                 $i = $semi;
                 continue;
             }
-            if ($id === '&' && $i + 1 < $end && $this->tokens[$i + 1]['id'] === T_VARIABLE) {
+            if (TokenHelper::isAmpersand($id) && $i + 1 < $end && $this->tokens[$i + 1]['id'] === T_VARIABLE) {
                 $prevId = $i > $start ? $this->tokens[$i - 1]['id'] : null;
                 if (
                     $prevId === '='
@@ -606,7 +872,7 @@ final class TreeBuilderReturnIssueFilter implements IssueFilterHook
                 $useClose = $this->findMatching($cursor + 1, $limit, '(', ')');
                 if ($useClose !== null) {
                     for ($k = $cursor + 2; $k < $useClose; ++$k) {
-                        if ($this->tokens[$k]['id'] === '&' && $k + 1 < $useClose && $this->tokens[$k + 1]['id'] === T_VARIABLE) {
+                        if (TokenHelper::isAmpersand($this->tokens[$k]['id']) && $k + 1 < $useClose && $this->tokens[$k + 1]['id'] === T_VARIABLE) {
                             $aliased[$this->tokens[$k + 1]['text']] = true;
                         }
                     }
@@ -1713,13 +1979,14 @@ final class TreeBuilderReturnIssueFilter implements IssueFilterHook
 
     private function isTreeBuilderClassName(string $rawName, bool $isFullyQualified): bool
     {
+        return $this->resolveClassFqn($rawName, $isFullyQualified) === self::TREE_BUILDER_FQN;
+    }
+
+    private function resolveClassFqn(string $rawName, bool $isFullyQualified): string
+    {
         $lower = strtolower(ltrim($rawName, '\\'));
         if ($isFullyQualified) {
-            return $lower === self::TREE_BUILDER_FQN;
-        }
-
-        if ($lower === self::TREE_BUILDER_FQN) {
-            return true;
+            return $lower;
         }
 
         $segments = explode('\\', $lower);
@@ -1727,14 +1994,14 @@ final class TreeBuilderReturnIssueFilter implements IssueFilterHook
         if (isset($this->imports[$first])) {
             $rest = count($segments) > 1 ? '\\' . implode('\\', array_slice($segments, 1)) : '';
 
-            return $this->imports[$first] . $rest === self::TREE_BUILDER_FQN;
+            return $this->imports[$first] . $rest;
         }
 
         if ($this->currentNamespace !== '') {
-            return $this->currentNamespace . '\\' . $lower === self::TREE_BUILDER_FQN;
+            return $this->currentNamespace . '\\' . $lower;
         }
 
-        return false;
+        return $lower;
     }
 
     private function extractLiteralRootType(int $start, int $end): ?string

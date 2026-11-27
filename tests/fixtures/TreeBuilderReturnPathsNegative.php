@@ -234,3 +234,29 @@ final class DestructuringInIfConditionConfig implements ConfigurationInterface
         return $treeBuilder;
     }
 }
+
+final class ReferenceAliasRebindConfig implements ConfigurationInterface
+{
+    public function getConfigTreeBuilder(): TreeBuilder
+    {
+        $treeBuilder = new TreeBuilder('root');
+        $alias = &$treeBuilder;
+        $alias = new TreeBuilder('root', 'scalar');
+
+        return $treeBuilder;
+    }
+}
+
+final class ClosureUseByRefRebindConfig implements ConfigurationInterface
+{
+    public function getConfigTreeBuilder(): TreeBuilder
+    {
+        $treeBuilder = new TreeBuilder('root');
+        $mutate = static function () use (&$treeBuilder): void {
+            $treeBuilder = new TreeBuilder('root', 'scalar');
+        };
+        $mutate();
+
+        return $treeBuilder;
+    }
+}

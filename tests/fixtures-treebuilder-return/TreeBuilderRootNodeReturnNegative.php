@@ -6,6 +6,7 @@ namespace SymfonyFixtureTreeBuilderReturn;
 
 use Symfony\Component\Config\Definition\Builder\ArrayNodeDefinition;
 use Symfony\Component\Config\Definition\Builder\NodeParentInterface;
+use Symfony\Component\Config\Definition\Builder\ScalarNodeDefinition;
 use Symfony\Component\Config\Definition\Builder\TreeBuilder;
 
 final class CustomNodeParent implements NodeParentInterface
@@ -88,5 +89,43 @@ final class TreeBuilderRootNodeReturnNegative extends ParameterizedNullRootParen
     public function endParentGenericStillChecked(): void
     {
         (new TreeBuilder('root'))->getRootNode()->end()->missingOnTreeBuilder();
+    }
+
+    public function parameterizedClosureAndArrowReturns(): void
+    {
+        $nullClosure = /** @return ArrayNodeDefinition<null> */ static function (): ArrayNodeDefinition {
+            return (new TreeBuilder('closure_explicit_null'))->getRootNode();
+        };
+        $nullArrow = /** @return ScalarNodeDefinition<null> */ static fn (): ScalarNodeDefinition => (new TreeBuilder('arrow_explicit_null', 'scalar'))->getRootNode();
+        $customClosure = /** @return ArrayNodeDefinition<CustomNodeParent> */ static function (): ArrayNodeDefinition {
+            return (new TreeBuilder('closure_custom_parent'))->getRootNode();
+        };
+        unset($nullClosure, $nullArrow, $customClosure);
+    }
+
+    /** @return ScalarNodeDefinition<null> */
+    public function explicitNullScalarReturn(): ScalarNodeDefinition
+    {
+        return (new TreeBuilder('scalar_explicit_null', 'scalar'))->getRootNode();
+    }
+
+    public function wrongConcreteScalarAsInteger(): ScalarNodeDefinition
+    {
+        return (new TreeBuilder('wrong_int', 'integer'))->getRootNode();
+    }
+}
+
+final class UnparamOverrideOfParameterizedParent extends ParameterizedNullRootParent
+{
+    /** @return ArrayNodeDefinition */
+    public function inheritedNullSection(): ArrayNodeDefinition
+    {
+        return (new TreeBuilder('override_unparam'))->getRootNode();
+    }
+
+    /** @return ArrayNodeDefinition */
+    public function inheritedCustomParentSection(): ArrayNodeDefinition
+    {
+        return (new TreeBuilder('override_custom'))->getRootNode();
     }
 }

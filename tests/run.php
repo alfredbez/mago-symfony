@@ -73,7 +73,7 @@ $expected = [
         'tests/fixtures/TreeBuilderRootNodeReturn.php' => [],
         'tests/fixtures/TreeBuilderReturnPathsNegative.php' => $isSymfony7
             ? [
-                'invalid-return-statement' => 14,
+                'invalid-return-statement' => 16,
                 'possibly-invalid-argument' => 1,
             ]
             : [],
@@ -167,7 +167,7 @@ $expected = [
             ],
         'tests/fixtures/TreeBuilderReturnPathsNegative.php' => $isSymfony7
             ? [
-                'invalid-return-statement' => 15,
+                'invalid-return-statement' => 17,
                 'possibly-invalid-argument' => 1,
             ]
             : [],
@@ -371,6 +371,8 @@ $sites = [
                 '202:invalid-return-statement',
                 '214:invalid-return-statement',
                 '234:invalid-return-statement',
+                '246:invalid-return-statement',
+                '260:invalid-return-statement',
             ]
             : [],
         'tests/fixtures/ConfigNodes.php' => [],
@@ -942,32 +944,67 @@ if ($arrayNodeHasTemplates) {
     $tbReturnWith = analyze(false, 'tests/mago-treebuilder-return.toml');
     $tbReturnWithout = analyze(true, 'tests/mago-treebuilder-return.toml');
     $failures += assertHistograms('treebuilder return negative with extension', $tbReturnWith, [
+        'tests/fixtures-treebuilder-return/TreeBuilderRootNodeReturnPositive.php' => [],
         'tests/fixtures-treebuilder-return/TreeBuilderRootNodeReturnNegative.php' => [
-            'invalid-return-statement' => 7,
+            'incompatible-return-type' => 1,
+            'invalid-return-statement' => 14,
             'less-specific-return-statement' => 1,
             'non-existent-method' => 1,
         ],
     ]);
     $failures += assertHistograms('treebuilder return negative --no-extensions', $tbReturnWithout, [
+        'tests/fixtures-treebuilder-return/TreeBuilderRootNodeReturnPositive.php' => [
+            'less-specific-return-statement' => 15,
+        ],
         'tests/fixtures-treebuilder-return/TreeBuilderRootNodeReturnNegative.php' => [
-            'less-specific-return-statement' => 8,
+            'incompatible-return-type' => 1,
+            'less-specific-return-statement' => 15,
             'non-existent-method' => 1,
         ],
     ]);
     $failures += assertSites('treebuilder return negative with extension', $tbReturnWith, [
+        'tests/fixtures-treebuilder-return/TreeBuilderRootNodeReturnPositive.php' => [],
         'tests/fixtures-treebuilder-return/TreeBuilderRootNodeReturnNegative.php' => [
-            '26:invalid-return-statement',
-            '45:invalid-return-statement',
-            '55:invalid-return-statement',
-            '60:invalid-return-statement',
-            '65:invalid-return-statement',
-            '70:invalid-return-statement',
-            '75:invalid-return-statement',
-            '85:less-specific-return-statement',
-            '90:non-existent-method',
+            '27:invalid-return-statement',
+            '46:invalid-return-statement',
+            '56:invalid-return-statement',
+            '61:invalid-return-statement',
+            '66:invalid-return-statement',
+            '71:invalid-return-statement',
+            '76:invalid-return-statement',
+            '86:less-specific-return-statement',
+            '91:non-existent-method',
+            '97:invalid-return-statement',
+            '99:invalid-return-statement',
+            '101:invalid-return-statement',
+            '109:invalid-return-statement',
+            '114:invalid-return-statement',
+            '123:invalid-return-statement',
+            '127:incompatible-return-type',
+            '129:invalid-return-statement',
         ],
     ]);
 }
+
+$tbGlobalWith = analyze(false, 'tests/mago-treebuilder-global.toml');
+$tbGlobalWithout = analyze(true, 'tests/mago-treebuilder-global.toml');
+$failures += assertHistograms('treebuilder global with extension', $tbGlobalWith, [
+    'tests/fixtures-treebuilder-global/GlobalTreeBuilder.php' => [],
+    'tests/fixtures-treebuilder-global/GlobalTreeBuilderNegative.php' => [
+        'non-existent-method' => 2,
+    ],
+]);
+$failures += assertHistograms('treebuilder global --no-extensions', $tbGlobalWithout, [
+    'tests/fixtures-treebuilder-global/GlobalTreeBuilder.php' => [
+        'mixed-method-access' => 1,
+        'non-existent-method' => 2,
+    ],
+    'tests/fixtures-treebuilder-global/GlobalTreeBuilderNegative.php' => [
+        'non-existent-method' => 2,
+    ],
+]);
+$failures += assertMessageCount('treebuilder global with extension', $tbGlobalWith, 'tests/fixtures-treebuilder-global/GlobalTreeBuilderNegative.php', 'non-existent-method', 'EnumNodeDefinition', 1);
+$failures += assertMessageCount('treebuilder global with extension', $tbGlobalWith, 'tests/fixtures-treebuilder-global/GlobalTreeBuilderNegative.php', 'non-existent-method', 'ScalarNodeDefinition', 1);
 
 $lifecycleWith = analyze(false, 'tests/mago-lifecycle.toml');
 $lifecycleWithout = analyze(true, 'tests/mago-lifecycle.toml');

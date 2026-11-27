@@ -641,9 +641,44 @@ check((new \SymfonyFixture\TwoHopForLoopConfig(2))->getConfigTreeBuilder()->getR
 check((new \SymfonyFixture\UnpackedArgsTreeBuilderConfig(['root', 'scalar']))->getConfigTreeBuilder()->getRootNode() instanceof \Symfony\Component\Config\Definition\Builder\ScalarNodeDefinition, 'Unpacked TreeBuilder args can return scalar root');
 check((new \SymfonyFixture\NestedAssignmentInCallArgConfig())->getConfigTreeBuilder()->getRootNode() instanceof \Symfony\Component\Config\Definition\Builder\ScalarNodeDefinition, 'Nested assignment in call argument returns scalar root');
 check((new \SymfonyFixture\DestructuringInIfConditionConfig(1))->getConfigTreeBuilder()->getRootNode() instanceof \Symfony\Component\Config\Definition\Builder\ScalarNodeDefinition, 'Destructuring in if condition returns scalar root');
+check((new \SymfonyFixture\ReferenceAliasRebindConfig())->getConfigTreeBuilder()->getRootNode() instanceof \Symfony\Component\Config\Definition\Builder\ScalarNodeDefinition, 'Reference alias rebinding returns scalar root');
+check((new \SymfonyFixture\ClosureUseByRefRebindConfig())->getConfigTreeBuilder()->getRootNode() instanceof \Symfony\Component\Config\Definition\Builder\ScalarNodeDefinition, 'Closure use-by-reference rebinding returns scalar root');
 check((new \SymfonyFixture\GroupUseArrayConfig())->getConfigTreeBuilder()->getRootNode() instanceof \Symfony\Component\Config\Definition\Builder\ArrayNodeDefinition, 'Group use TreeBuilder returns array root');
 check((new \SymfonyFixture\ArrowDefaultWithDoubleArrowArrayConfig())->getConfigTreeBuilder()->getRootNode() instanceof \Symfony\Component\Config\Definition\Builder\ArrayNodeDefinition, 'Arrow function with double arrow default does not mutate outer TreeBuilder');
 check((new \SymfonyFixture\AnonymousClassPropertyArrayConfig())->getConfigTreeBuilder()->getRootNode() instanceof \Symfony\Component\Config\Definition\Builder\ArrayNodeDefinition, 'Anonymous class property does not mutate outer TreeBuilder');
+
+$extractOptsMethod = new ReflectionMethod(\AlfredBez\MagoSymfony\Analyzer\Providers\ConsoleCommandArgumentsHook::class, 'extractOptionsFromClassFile');
+$tmpRefAppFile = sys_get_temp_dir() . '/mago-symfony-ref-app-' . getmypid() . '.php';
+file_put_contents(
+    $tmpRefAppFile,
+    "<?php\nclass RefApp {\n    protected function &getDefaultInputDefinition() {\n        \$def = new InputDefinition([new InputOption('ref-flag', null, InputOption::VALUE_NONE)]);\n        return \$def;\n    }\n}\n",
+);
+try {
+    $refOpts = $extractOptsMethod->invoke(
+        new \AlfredBez\MagoSymfony\Analyzer\Providers\ConsoleCommandArgumentsHook(),
+        $tmpRefAppFile,
+        __FILE__,
+        ['getdefaultinputdefinition'],
+    );
+    check($refOpts === ['ref-flag' => true], 'By-reference getDefaultInputDefinition() extracts InputOption on PHP 8.1+');
+} finally {
+    @unlink($tmpRefAppFile);
+}
+
+$closureFallbackMethod = new ReflectionMethod(\AlfredBez\MagoSymfony\Analyzer\Providers\TreeBuilderReturnIssueFilter::class, 'isProvenUnparameterizedClosureReturn');
+$tbFilter = new \AlfredBez\MagoSymfony\Analyzer\Providers\TreeBuilderReturnIssueFilter();
+$unparamClosureCode = "<?php\nuse Symfony\\Component\\Config\\Definition\\Builder\\ScalarNodeDefinition;\nuse Symfony\\Component\\Config\\Definition\\Builder\\TreeBuilder;\n\$fn = static fn (): ScalarNodeDefinition => (new TreeBuilder('s', 'scalar'))->getRootNode();\n";
+$unparamOffset = strpos($unparamClosureCode, '(new TreeBuilder');
+check(
+    $unparamOffset !== false && $closureFallbackMethod->invoke($tbFilter, $unparamClosureCode, $unparamOffset, 'symfony\\component\\config\\definition\\builder\\scalarnodedefinition') === true,
+    'Closure fallback accepts unparameterized arrow function return',
+);
+$paramClosureCode = "<?php\nuse Symfony\\Component\\Config\\Definition\\Builder\\ArrayNodeDefinition;\nuse Symfony\\Component\\Config\\Definition\\Builder\\TreeBuilder;\n\$fn = /** @return ArrayNodeDefinition<null> */ static function (): ArrayNodeDefinition { return (new TreeBuilder('a'))->getRootNode(); };\n";
+$paramOffset = strpos($paramClosureCode, 'return');
+check(
+    $paramOffset !== false && $closureFallbackMethod->invoke($tbFilter, $paramClosureCode, $paramOffset, 'symfony\\component\\config\\definition\\builder\\arraynodedefinition') === false,
+    'Closure fallback rejects explicitly parameterized @return ArrayNodeDefinition<null>',
+);
 
 $parseIntMethod = new ReflectionMethod(\AlfredBez\MagoSymfony\Analyzer\Providers\ConsoleCommandDefinition::class, 'parseIntegerLiteral');
 check($parseIntMethod->invoke(null, '010') === 8, 'Legacy octal literal 010 parses as 8');

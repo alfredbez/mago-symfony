@@ -526,7 +526,7 @@ final class ConsoleCommandArgumentsHook implements ClassLikeAnalysisHook
                 continue;
             }
             $nameIdx = $i + 1;
-            if (isset($tokens[$nameIdx]) && $tokens[$nameIdx][0] === '&') {
+            if (isset($tokens[$nameIdx]) && TokenHelper::isAmpersand($tokens[$nameIdx][0])) {
                 ++$nameIdx;
             }
             if (!isset($tokens[$nameIdx]) || $tokens[$nameIdx][0] !== T_STRING) {
