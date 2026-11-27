@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace AlfredBez\MagoSymfony\Analyzer\Providers;
 
+use Mago\Sdk\Analyzer\Metadata\ClassLikeKind;
 use Mago\Sdk\Analyzer\MethodReturnTypeProvider;
 use Mago\Sdk\Analyzer\MethodTarget;
 use Mago\Sdk\Analyzer\ReturnTypeProviderContext;
@@ -147,7 +148,19 @@ final class ContainerGetReturnTypeProvider implements MethodReturnTypeProvider
             return null;
         }
 
-        return $context->codebase->classOrInterfaceExists($id) ? $this->serviceType($id) : null;
+        $classLike = $context->codebase->getClassLike($id);
+        if (
+            $classLike === null
+            || ($classLike->kind !== ClassLikeKind::Class_ && $classLike->kind !== ClassLikeKind::Interface)
+        ) {
+            return null;
+        }
+
+        if (ltrim($id, '\\') !== ltrim($classLike->originalName, '\\')) {
+            return null;
+        }
+
+        return $this->serviceType($classLike->originalName);
     }
 
     /**

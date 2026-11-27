@@ -998,6 +998,46 @@ $failures += assertMessageCount('lifecycle with extension', $lifecycleWith, 'tes
 $failures += assertMessageCount('lifecycle with extension', $lifecycleWith, 'tests/fixtures-lifecycle/LifecycleAndEntryPointsNegative.php', 'uninitialized-property', '$plainPublic', 1);
 $failures += assertMessageCount('lifecycle with extension', $lifecycleWith, 'tests/fixtures-lifecycle/LifecycleAndEntryPointsNegative.php', 'unused-method', 'genuinelyUnusedHelper', 1);
 
+$containerCaseWith = analyze(false, 'tests/mago-container-case.toml');
+$containerCaseWithout = analyze(true, 'tests/mago-container-case.toml');
+putenv('MAGO_SYMFONY_CONTAINER_XML=' . __DIR__ . '/container-case.xml');
+$containerCaseXml = analyze(false, 'tests/mago-container-case.toml');
+putenv('MAGO_SYMFONY_CONTAINER_XML');
+
+$failures += assertHistograms('container case fallback with extension', $containerCaseWith, [
+    'tests/fixtures-container-case/ContainerCaseFallback.php' => [],
+    'tests/fixtures-container-case/ContainerCaseFallbackNegative.php' => [
+        'ambiguous-object-method-access' => 1,
+        'mixed-method-access' => 3,
+        ...($magoAtLeast161 ? [] : ['possible-method-access-on-null' => 1]),
+    ],
+]);
+$failures += assertHistograms('container case fallback --no-extensions', $containerCaseWithout, [
+    'tests/fixtures-container-case/ContainerCaseFallback.php' => [
+        'mixed-argument' => 2,
+        'mixed-assignment' => 4,
+        'mixed-method-access' => 4,
+        'mixed-operand' => 1,
+        'mixed-return-statement' => 1,
+    ],
+    'tests/fixtures-container-case/ContainerCaseFallbackNegative.php' => [
+        'ambiguous-object-method-access' => 1,
+        'mixed-method-access' => 3,
+        ...($magoAtLeast161 ? [] : ['possible-method-access-on-null' => 1]),
+    ],
+]);
+$failures += assertHistograms('container case XML with extension', $containerCaseXml, [
+    'tests/fixtures-container-case/ContainerCaseFallback.php' => [
+        'impossible-condition' => 1,
+        'redundant-condition' => 1,
+    ],
+    'tests/fixtures-container-case/ContainerCaseFallbackNegative.php' => [
+        'mixed-method-access' => 2,
+        'non-existent-method' => 2,
+    ],
+]);
+$failures += assertMessageCount('container case XML with extension', $containerCaseXml, 'tests/fixtures-container-case/ContainerCaseFallbackNegative.php', 'non-existent-method', 'SymfonyFixtureCase\\AppLogger', 2);
+
 $failures += verifyConfigErrorBehavior($magoCommand);
 
 if ($failures > 0) {

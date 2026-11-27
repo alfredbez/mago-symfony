@@ -15,6 +15,9 @@ use Mago\Sdk\Analyzer\Codebase;
 use Mago\Sdk\Analyzer\FileAnalysis;
 use Mago\Sdk\Analyzer\Invocation;
 use Mago\Sdk\Analyzer\InvocationKind;
+use Mago\Sdk\Analyzer\Metadata\ClassLikeKind;
+use Mago\Sdk\Analyzer\Metadata\ClassLikeMetadata;
+use Mago\Sdk\Analyzer\Metadata\MetadataFlags;
 use Mago\Sdk\Analyzer\NodeAnalysisContext;
 use Mago\Sdk\Analyzer\ReferenceSummary;
 use Mago\Sdk\Analyzer\ReturnTypeProviderContext;
@@ -31,6 +34,7 @@ use Mago\Sdk\Internal\Syntax\NodeStore;
 use Mago\Sdk\Internal\Syntax\ResolvedNameStore;
 use Mago\Sdk\Internal\Syntax\TriviaStore;
 use Mago\Sdk\PHPVersion;
+use Mago\Sdk\SourceLocation;
 use Mago\Sdk\Span;
 use Mago\Sdk\Syntax\NodeKind;
 use Mago\Sdk\Syntax\SourceFile;
@@ -63,19 +67,59 @@ function providerWorkloads(): array
     $sfContainerBuilder = 'Symfony\\Component\\DependencyInjection\\ContainerBuilder';
 
     $cache = new MetadataCache(1);
+    $classLikeBucket = (Protocol::GET_CLASS_LIKES << 4) | Protocol::ANY_CLASS_LIKE;
+    $benchLocation = new SourceLocation('bench/workloads.php', new Span(0, 1));
+    $seedClassLike = static function (string $originalName, ClassLikeKind $kind) use ($cache, $classLikeBucket, $benchLocation): void {
+        $lower = strtolower($originalName);
+        $cache->existence[Protocol::EXISTS_CLASS_OR_INTERFACE][$lower] = true;
+        $cache->values[$classLikeBucket][$lower] = new ClassLikeMetadata(
+            name: $lower,
+            originalName: $originalName,
+            kind: $kind,
+            location: $benchLocation,
+            nameLocation: $benchLocation,
+            flags: new MetadataFlags(MetadataFlags::USER_DEFINED),
+            directParentClass: null,
+            directParentInterfaces: [],
+            parentInterfaces: [],
+            parentClasses: [],
+            requiredExtends: [],
+            requiredImplements: [],
+            usedTraits: [],
+            unresolvedHierarchyDependencies: [],
+            methods: [],
+            pseudoMethods: [],
+            staticPseudoMethods: [],
+            properties: [],
+            magicProperties: [],
+            constants: [],
+            enumCases: [],
+            children: null,
+            permittedInheritors: null,
+            templates: [],
+            attributes: [],
+            typeAliases: [],
+            mixins: [],
+            enumType: null,
+            sealedMethods: null,
+            sealedProperties: null,
+            availableVersions: [],
+        );
+    };
 
     for ($i = 0; $i < 16; ++$i) {
-        $cache->existence[Protocol::EXISTS_CLASS_OR_INTERFACE][sprintf('symfonybench\\benchservice%02d', $i)] = true;
+        $seedClassLike(sprintf('SymfonyBench\\BenchService%02d', $i), ClassLikeKind::Class_);
     }
     foreach ([
-        ConcreteMailer::class,
-        ConcreteLogger::class,
-        MailerInterface::class,
-        LoggerInterface::class,
-    ] as $class) {
-        $cache->existence[Protocol::EXISTS_CLASS_OR_INTERFACE][strtolower($class)] = true;
+        ConcreteMailer::class => ClassLikeKind::Class_,
+        ConcreteLogger::class => ClassLikeKind::Class_,
+        MailerInterface::class => ClassLikeKind::Interface,
+        LoggerInterface::class => ClassLikeKind::Interface,
+    ] as $class => $kind) {
+        $seedClassLike($class, $kind);
     }
     $cache->existence[Protocol::EXISTS_CLASS_OR_INTERFACE]['app.unknown.service'] = false;
+    $cache->values[$classLikeBucket]['app.unknown.service'] = null;
 
     foreach ([
         $arrayNode,

@@ -25,8 +25,11 @@ $container = new Container();
 $greeter = new ConcreteGreeter();
 $container->set(Greeter::class, $greeter);
 $container->set('42', new Mailer());
+$container->set('logger', $greeter);
+$container->set('Logger', new Mailer());
 check($container->get(Greeter::class) === $greeter, 'Class-name service ids can resolve to a concrete implementation');
 check($container->get('42') instanceof Mailer, 'Numeric string service ids are valid');
+check($container->get('logger') === $greeter && $container->get('Logger') instanceof Mailer, 'Container service ids are case-sensitive');
 $locator = new ServiceLocator(['shop.greeter' => static fn () => $greeter]);
 check($locator->get('shop.greeter') === $greeter, 'ServiceLocator get preserves the service');
 
