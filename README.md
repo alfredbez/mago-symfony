@@ -39,7 +39,7 @@ Register the bundled worker in `mago.toml`:
 includes = ["vendor/symfony", "vendor/psr"]
 
 [extension-hosts.symfony]
-command = ["php", "-d", "xdebug.mode=off", "-d", "pcov.enabled=0", "vendor/bin/mago-symfony-worker"]
+command = ["php", "-d", "xdebug.mode=off", "-d", "pcov.enabled=0", "-d", "memory_limit=512M", "vendor/bin/mago-symfony-worker"]
 workers = 1
 # Optional. Configure container dumps, strict service checks, or a Security user class.
 # environment = {
@@ -50,7 +50,7 @@ workers = 1
 ```
 
 - `[source] includes` must contain the Symfony packages your app uses and the PSR container contracts. Mago reads those files to resolve method signatures. Listing `vendor/symfony` covers every installed Symfony package. If you list individual packages instead, keep the ones your app calls.
-- The `-d` flags keep Xdebug and PCOV out of the worker. Both hooks add startup cost and coverage bookkeeping to a run that only reads code.
+- The `-d` flags keep Xdebug and PCOV out of the worker and give the worker 512M of headroom for large codebases. Small and medium applications also run within PHP's default 128M limit.
 - Pass worker environment variables through `[extension-hosts.symfony] environment`. Leave the table unset, or omit keys you do not need, to keep defaults and auto-discovery active.
 
 Check the worker and run the analyzer:
@@ -86,7 +86,7 @@ Absent auto-discovery paths (`.mago/symfony-container.json` and `var/cache/{dev,
 | `alfredbez/symfony/unknown-console-option` | error | `getOption('name')` asks for an option that `configure()` does not declare. |
 | `alfredbez/symfony/invalid-console-input-definition` | error | `InputArgument` or `InputOption` uses a mode and default combination that Symfony rejects, such as `VALUE_NONE` with a non-null default. |
 
-`private-service-access` skips `ServiceLocator`, `ContainerBuilder`, `TestContainer`, PHPUnit `TestCase` subclasses, and calls with a non-throwing invalid-reference flag. `unknown-console-*` skips `parent::configure()`, definitions built by dynamic helper methods, and the default application options derived from the analyzed Symfony Console `Application` class.
+`private-service-access` skips `ServiceLocator`, `ContainerBuilder`, `TestContainer`, PHPUnit `TestCase` subclasses, and calls with a non-throwing invalid-reference flag. `unknown-console-*` skips `parent::configure()`, definitions built by dynamic helper methods, lookups guarded by `hasOption()` or `hasArgument()`, and default application options derived from the analyzed Symfony Console `Application` class.
 
 To silence a code in one project:
 
@@ -109,7 +109,7 @@ $container->get('app.private_service');
 | `ContainerInterface::get('id')` and `Container::get('id')` | The service class from the compiled XML or JSON map, including multi-hop aliases, class and service factories, and class-name IDs. `ContainerBuilder`, `ServiceLocator`, and `ServiceProviderInterface` fall back to class-name resolution. |
 | `ParameterBagInterface::get()`, `ContainerInterface::getParameter()`, `Container::getParameter()`, `AbstractController::getParameter()` | The parameter's literal scalar, list, keyed array, constant, or `%env(...)%` type. |
 | `Container::get()` and `ContainerBuilder::get()` with invalid-reference flags | Nullable returns for flags `0`, `2`, `3`, and `4` on `Container`; non-null for flags `0` and `1` on `ContainerBuilder`. |
-| `TreeBuilder` and `NodeDefinition` chains | The node type after `children()`, `node()`, prototypes, `validate()`, `beforeNormalization()`, and `end()`. Tracks custom `NodeBuilder` classes through `setNodeClass()` and `setParent()`, and accepts unparameterized `: ArrayNodeDefinition` root-node returns while keeping explicit and inherited generic mismatches reported. |
+| `TreeBuilder` and `NodeDefinition` chains | The node type after `children()`, `node()`, prototypes, `validate()`, `beforeNormalization()`, and `end()`. Tracks custom `NodeBuilder` classes through `setNodeClass()` and `setParent()`, and accepts unparameterized concrete root-node returns (native or `@return`) while keeping explicit and inherited generic mismatches reported. |
 | `HelperSet::get()` and `Command::getHelper()` | `FormatterHelper`, `DebugFormatterHelper`, `ProcessHelper`, or `QuestionHelper` for the four default names. |
 | `HeaderBag::get($key, $default)` | `string` when the default is a non-null string. |
 | `ParameterBag::getEnum()` and `InputBag::getEnum()` | The target `BackedEnum` when a matching non-null default is supplied. |
@@ -121,8 +121,8 @@ $container->get('app.private_service');
 | `SerializerInterface::deserialize()` and `DenormalizerInterface::denormalize()` | `Foo`, `array<array-key, Foo>`, or nested arrays for literal `Foo`, `Foo[]`, and `Foo[][]` types, plus `class-string<Foo>` arguments. |
 | `WrappedExceptionsInterface::getWrappedExceptions()` | `array<array-key, T>` for a concrete class or interface filter. |
 | Security `getUser()` | `ConfiguredUser` or `null` when `MAGO_SYMFONY_USER_CLASS` is set. Covers `AbstractController`, `SecurityBundle\Security`, `Security\Core\Security`, and `TokenInterface`. |
-| Lifecycle initializers and `#[Required]` properties | `AbstractController::setContainer()`, `Command::initialize()`, `ConstraintValidator::initialize()`, `InputAwareHelper::setInput()`, methods with `#[Required]`, and non-readonly public writable properties with `#[Required]` initialize properties when `check-property-initialization = true`. |
-| Method-level entry points | Recognizes method attributes (`#[Route]`, `#[AsEventListener]`, `#[AsMessageHandler]`, `#[Callback]`, `#[Required]`) and standard Symfony lifecycle overrides (`Command`, `AbstractType`, `ConstraintValidator`, `Voter`, `ConfigurationInterface`, `ExtensionInterface`, `CompilerPassInterface`, `EventSubscriberInterface`, `ServiceSubscriberInterface`) when `find-unused-definitions = true`. |
+| Lifecycle initializers and `#[Required]` properties | `AbstractController::setContainer()`, `Command::initialize()`, `ConstraintValidator::initialize()`, `InputAwareHelper::setInput()`, public non-static methods with `#[Required]`, and non-readonly public writable properties with `#[Required]` (typed with a class or interface, or paired with an `#[Autowire*]` attribute) initialize properties when `check-property-initialization = true`. |
+| Method-level entry points | Recognizes method attributes (`#[Route]`, `#[AsEventListener]`, `#[AsMessageHandler]`, `#[Callback]`) and standard Symfony lifecycle overrides (`Command`, `AbstractType`, `ConstraintValidator`, `Voter`, `ConfigurationInterface`, `ExtensionInterface`, `CompilerPassInterface`, `EventSubscriberInterface`, `ServiceSubscriberInterface`) when `find-unused-definitions = true`. |
 
 ## Compatibility and SemVer policy
 
@@ -150,7 +150,8 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html) 
 - `ControllerEvent::getAttributes()` narrowing assumes the attribute map passed to `setController()` matches its class keys.
 - `WrappedExceptionsInterface::getWrappedExceptions()` narrows only `Throwable` subtypes, so non-`Throwable` marker interfaces keep `Throwable` methods.
 - On Symfony 6.4 and 7.2, an untracked `NodeBuilder` stays nullable (`ArrayNodeDefinition|null`), and an untracked `NodeDefinition` falls back to Symfony's declared `end()` return type.
-- `ConsoleCommandArgumentsHook` reads static `addArgument()`, `addOption()`, and literal `setDefinition([new InputArgument(...), new InputOption(...)])` calls in `configure()`.
+- `ConsoleCommandArgumentsHook` reads static `addArgument()`, `addOption()`, and `setDefinition()` calls (array literals or `new InputDefinition([...])`, including constant names and aliased imports) in `configure()`.
+- When `Symfony\Bundle\FrameworkBundle\Console\Application` is present in `[source] includes`, `env`, `no-debug`, and `profile` are treated as default application options on every `Command` subclass because static codebase metadata cannot determine whether a command mounts on `FrameworkBundle\Console\Application` or a standalone `Console\Application`. Exclude `vendor/symfony/framework-bundle` from `includes` in standalone Console applications to enforce plain `Application` defaults.
 
 ## Development
 
