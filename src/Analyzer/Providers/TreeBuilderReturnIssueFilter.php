@@ -122,6 +122,14 @@ final class TreeBuilderReturnIssueFilter implements IssueFilterHook
     /** @var list<array{id: int|string, text: string, start: int, end: int}> */
     private array $tokens = [];
 
+    private ?string $cachedContents = null;
+
+    /** @var list<array{id: int|string, text: string, start: int, end: int}> */
+    private array $cachedTokens = [];
+
+    /** @var array<int, string> */
+    private array $cachedDocBeforeNonTrivia = [];
+
     /** @var array<string, string> */
     private array $imports = [];
 
@@ -296,11 +304,12 @@ final class TreeBuilderReturnIssueFilter implements IssueFilterHook
             && $atomic->parameters === null;
     }
 
-    private function isProvenUnparameterizedClosureReturn(
-        string $contents,
-        int $targetOffset,
-        string $expectedNodeFqn,
-    ): bool {
+    private function loadTokenizedContents(string $contents): void
+    {
+        if ($this->cachedContents === $contents) {
+            return;
+        }
+
         $rawTokens = token_get_all($contents);
         /** @var list<array{id: int|string, text: string, start: int, end: int}> $tokens */
         $tokens = [];
@@ -334,6 +343,20 @@ final class TreeBuilderReturnIssueFilter implements IssueFilterHook
                 $offset += $len;
             }
         }
+
+        $this->cachedContents = $contents;
+        $this->cachedTokens = $tokens;
+        $this->cachedDocBeforeNonTrivia = $docBeforeNonTrivia;
+    }
+
+    private function isProvenUnparameterizedClosureReturn(
+        string $contents,
+        int $targetOffset,
+        string $expectedNodeFqn,
+    ): bool {
+        $this->loadTokenizedContents($contents);
+        $tokens = $this->cachedTokens;
+        $docBeforeNonTrivia = $this->cachedDocBeforeNonTrivia;
 
         $this->tokens = $tokens;
         $this->collectImportsBefore($targetOffset);
@@ -476,6 +499,14 @@ final class TreeBuilderReturnIssueFilter implements IssueFilterHook
         }
 
         if (
+            $startIdx >= 1
+            && $this->tokens[$startIdx - 1]['id'] === T_RETURN
+            && isset($docBeforeNonTrivia[$startIdx - 1])
+        ) {
+            return $docBeforeNonTrivia[$startIdx - 1];
+        }
+
+        if (
             $startIdx >= 2
             && $this->tokens[$startIdx - 1]['id'] === '='
             && $this->tokens[$startIdx - 2]['id'] === T_VARIABLE
@@ -536,7 +567,8 @@ final class TreeBuilderReturnIssueFilter implements IssueFilterHook
 
     private function resolveDominatingReturnRootType(string $contents, int $targetOffset): ?string
     {
-        $this->tokens = self::tokenize($contents);
+        $this->loadTokenizedContents($contents);
+        $this->tokens = $this->cachedTokens;
         $this->targetOffset = $targetOffset;
         $this->targetMatched = false;
         $this->targetRootType = null;
@@ -564,30 +596,6 @@ final class TreeBuilderReturnIssueFilter implements IssueFilterHook
         $this->walkBlock($bodyStart, $bodyEnd, []);
 
         return $this->targetMatched ? $this->targetRootType : null;
-    }
-
-    /**
-     * @return list<array{id: int|string, text: string, start: int, end: int}>
-     */
-    private static function tokenize(string $contents): array
-    {
-        $tokens = [];
-        $offset = 0;
-        foreach (token_get_all($contents) as $tok) {
-            if (is_array($tok)) {
-                $len = strlen($tok[1]);
-                if ($tok[0] !== T_WHITESPACE && $tok[0] !== T_COMMENT && $tok[0] !== T_DOC_COMMENT) {
-                    $tokens[] = ['id' => $tok[0], 'text' => $tok[1], 'start' => $offset, 'end' => $offset + $len];
-                }
-                $offset += $len;
-            } else {
-                $len = strlen($tok);
-                $tokens[] = ['id' => $tok, 'text' => $tok, 'start' => $offset, 'end' => $offset + $len];
-                $offset += $len;
-            }
-        }
-
-        return $tokens;
     }
 
     private function collectImportsBefore(int $targetOffset): void

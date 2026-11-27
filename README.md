@@ -86,7 +86,7 @@ Absent auto-discovery paths (`.mago/symfony-container.json` and `var/cache/{dev,
 | `alfredbez/symfony/unknown-console-option` | error | `getOption('name')` asks for an option that `configure()` does not declare. |
 | `alfredbez/symfony/invalid-console-input-definition` | error | `InputArgument` or `InputOption` uses a mode and default combination that Symfony rejects, such as `VALUE_NONE` with a non-null default. |
 
-`private-service-access` skips `ServiceLocator`, `ContainerBuilder`, `TestContainer`, PHPUnit `TestCase` subclasses, and calls with a non-throwing invalid-reference flag. `unknown-console-*` skips `parent::configure()`, definitions built by dynamic helper methods, lookups guarded by `hasOption()` or `hasArgument()`, and default application options derived from the analyzed Symfony Console `Application` class.
+`private-service-access` skips `ServiceLocator`, `ContainerBuilder`, `TestContainer`, PHPUnit `TestCase` subclasses, and calls with a non-throwing invalid-reference flag. `unknown-console-*` skips `parent::configure()`, definitions built by dynamic helper methods, direct variable lookups guarded by `hasOption()` or `hasArgument()`, and default application options derived from the analyzed Symfony Console `Application` class.
 
 To silence a code in one project:
 

@@ -103,6 +103,14 @@ final class TreeBuilderRootNodeReturnNegative extends ParameterizedNullRootParen
         unset($nullClosure, $nullArrow, $customClosure);
     }
 
+    /** @return \Closure(): ArrayNodeDefinition<null> */
+    public function returnedInlineExplicitNullClosure(): \Closure
+    {
+        return /** @return ArrayNodeDefinition<null> */ static function (): ArrayNodeDefinition {
+            return (new TreeBuilder('ret_inline_null'))->getRootNode();
+        };
+    }
+
     /** @return ScalarNodeDefinition<null> */
     public function explicitNullScalarReturn(): ScalarNodeDefinition
     {

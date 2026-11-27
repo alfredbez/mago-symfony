@@ -11,6 +11,8 @@ use Mago\Sdk\Analyzer\PropertyInitializationProvider;
 use Mago\Sdk\Analyzer\PropertyInitializationProviderContext;
 use Mago\Sdk\Analyzer\PropertyTarget;
 use Mago\Sdk\Analyzer\Type\NamedObjectType;
+use Mago\Sdk\Analyzer\Type\ReferenceType;
+use Mago\Sdk\Analyzer\Type\ReferenceTypeKind;
 use Mago\Sdk\Analyzer\Type\SimpleAtomicType;
 use Mago\Sdk\Analyzer\Type\SimpleAtomicTypeKind;
 use Mago\Sdk\Analyzer\Type\Visibility;
@@ -20,16 +22,15 @@ use Mago\Sdk\Analyzer\Type\Visibility;
  * injected by Symfony's AutowireRequiredPropertiesPass via #[Symfony\Contracts\Service\Attribute\Required].
  *
  * Bare builtin types (scalar, array, mixed, object, iterable, callable) require a
- * Symfony\Component\DependencyInjection\Attribute\Autowire* attribute; otherwise
- * Symfony only autowires class or interface service types.
+ * Symfony\Component\DependencyInjection\Attribute\Autowire attribute (or subclass);
+ * otherwise Symfony only autowires class or interface service types.
  *
  * @internal
  */
 final class RequiredPropertyInitializationProvider implements PropertyInitializationProvider
 {
     private const LOWER_REQUIRED_ATTRIBUTE = 'symfony\\contracts\\service\\attribute\\required';
-    private const LOWER_AUTOWIRE_PREFIX = 'symfony\\component\\dependencyinjection\\attribute\\autowire';
-    private const LOWER_AUTOWIRE_BASE = 'symfony\\component\\dependencyinjection\\attribute\\autowire';
+    private const LOWER_AUTOWIRE_ATTRIBUTE = 'symfony\\component\\dependencyinjection\\attribute\\autowire';
 
     public function getTargets(): array
     {
@@ -52,20 +53,27 @@ final class RequiredPropertyInitializationProvider implements PropertyInitializa
         }
 
         $hasRequired = false;
-        $hasAutowire = false;
         foreach ($property->attributes as $attribute) {
-            $attrLower = strtolower(ltrim($attribute->name, '\\'));
-            if ($attrLower === self::LOWER_REQUIRED_ATTRIBUTE) {
+            if (strtolower(ltrim($attribute->name, '\\')) === self::LOWER_REQUIRED_ATTRIBUTE) {
                 $hasRequired = true;
-                continue;
-            }
-            if (!$hasAutowire && self::isAutowireAttribute($attribute->name, $attrLower, $context)) {
-                $hasAutowire = true;
+                break;
             }
         }
 
         if (!$hasRequired) {
             return false;
+        }
+
+        $hasAutowire = false;
+        foreach ($property->attributes as $attribute) {
+            $attrLower = strtolower(ltrim($attribute->name, '\\'));
+            if ($attrLower === self::LOWER_REQUIRED_ATTRIBUTE) {
+                continue;
+            }
+            if (self::isAutowireAttribute($attribute->name, $attrLower, $context)) {
+                $hasAutowire = true;
+                break;
+            }
         }
 
         return self::hasInjectableDeclaredType($property->declaredType, $hasAutowire, $context);
@@ -76,12 +84,12 @@ final class RequiredPropertyInitializationProvider implements PropertyInitializa
         string $lowerName,
         PropertyInitializationProviderContext $context,
     ): bool {
-        if (str_starts_with($lowerName, self::LOWER_AUTOWIRE_PREFIX)) {
+        if ($lowerName === self::LOWER_AUTOWIRE_ATTRIBUTE) {
             return true;
         }
 
         foreach ($context->codebase->getClassAncestors($attributeName) as $ancestor) {
-            if (strtolower(ltrim($ancestor, '\\')) === self::LOWER_AUTOWIRE_BASE) {
+            if (strtolower(ltrim($ancestor, '\\')) === self::LOWER_AUTOWIRE_ATTRIBUTE) {
                 return true;
             }
         }
@@ -92,7 +100,8 @@ final class RequiredPropertyInitializationProvider implements PropertyInitializa
     /**
      * Symfony's AutowireRequiredPropertiesPass skips properties whose native reflection type
      * is not a ReflectionNamedType (untyped, union, and intersection properties), and without
-     * an #[Autowire*] attribute can only autowire class/interface service types.
+     * an #[Autowire] attribute (or subclass) can only autowire class/interface service types.
+     * Unloaded external class/interface types stay injectable; known traits and enums are rejected.
      */
     private static function hasInjectableDeclaredType(
         ?TypeMetadata $declaredType,
@@ -109,7 +118,11 @@ final class RequiredPropertyInitializationProvider implements PropertyInitializa
                 continue;
             }
 
-            if ($atomic instanceof NamedObjectType && $atomic->intersections !== null && $atomic->intersections !== []) {
+            if (
+                ($atomic instanceof NamedObjectType || $atomic instanceof ReferenceType)
+                && $atomic->intersections !== null
+                && $atomic->intersections !== []
+            ) {
                 return false;
             }
 
@@ -128,13 +141,21 @@ final class RequiredPropertyInitializationProvider implements PropertyInitializa
             return true;
         }
 
-        if (!$nonNullAtomic instanceof NamedObjectType) {
+        $className = null;
+        if ($nonNullAtomic instanceof NamedObjectType) {
+            $className = $nonNullAtomic->name;
+        } elseif ($nonNullAtomic instanceof ReferenceType && $nonNullAtomic->kind === ReferenceTypeKind::Symbol) {
+            $className = $nonNullAtomic->name;
+        }
+
+        if ($className === null || $className === '') {
             return false;
         }
 
-        $classLike = $context->codebase->getClassLike($nonNullAtomic->name);
+        $classLike = $context->codebase->getClassLike($className);
 
-        return $classLike !== null
-            && ($classLike->kind === ClassLikeKind::Class_ || $classLike->kind === ClassLikeKind::Interface);
+        return $classLike === null
+            || $classLike->kind === ClassLikeKind::Class_
+            || $classLike->kind === ClassLikeKind::Interface;
     }
 }

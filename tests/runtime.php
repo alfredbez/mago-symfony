@@ -30,6 +30,11 @@ $container->set('Logger', new Mailer());
 check($container->get(Greeter::class) === $greeter, 'Class-name service ids can resolve to a concrete implementation');
 check($container->get('42') instanceof Mailer, 'Numeric string service ids are valid');
 check($container->get('logger') === $greeter && $container->get('Logger') instanceof Mailer, 'Container service ids are case-sensitive');
+try {
+    $container->get('\\' . Greeter::class);
+    throw new RuntimeException('Leading backslash service id must throw ServiceNotFoundException');
+} catch (ServiceNotFoundException) {
+}
 $locator = new ServiceLocator(['shop.greeter' => static fn () => $greeter]);
 check($locator->get('shop.greeter') === $greeter, 'ServiceLocator get preserves the service');
 
@@ -678,6 +683,18 @@ $paramOffset = strpos($paramClosureCode, 'return');
 check(
     $paramOffset !== false && $closureFallbackMethod->invoke($tbFilter, $paramClosureCode, $paramOffset, 'symfony\\component\\config\\definition\\builder\\arraynodedefinition') === false,
     'Closure fallback rejects explicitly parameterized @return ArrayNodeDefinition<null>',
+);
+$returnInlineParamCode = "<?php\nuse Symfony\\Component\\Config\\Definition\\Builder\\ArrayNodeDefinition;\nuse Symfony\\Component\\Config\\Definition\\Builder\\TreeBuilder;\nfunction makeClosure(): \\Closure {\n    return /** @return ArrayNodeDefinition<null> */ static function (): ArrayNodeDefinition { return (new TreeBuilder('a'))->getRootNode(); };\n}\n";
+$returnInlineOffset = strrpos($returnInlineParamCode, 'return');
+check(
+    $returnInlineOffset !== false && $closureFallbackMethod->invoke($tbFilter, $returnInlineParamCode, $returnInlineOffset, 'symfony\\component\\config\\definition\\builder\\arraynodedefinition') === false,
+    'Closure fallback rejects inline docblock after return keyword',
+);
+$docBeforeReturnParamCode = "<?php\nuse Symfony\\Component\\Config\\Definition\\Builder\\ArrayNodeDefinition;\nuse Symfony\\Component\\Config\\Definition\\Builder\\TreeBuilder;\nfunction makeClosure2(): \\Closure {\n    /** @return ArrayNodeDefinition<null> */\n    return static function (): ArrayNodeDefinition { return (new TreeBuilder('a'))->getRootNode(); };\n}\n";
+$docBeforeReturnOffset = strrpos($docBeforeReturnParamCode, 'return');
+check(
+    $docBeforeReturnOffset !== false && $closureFallbackMethod->invoke($tbFilter, $docBeforeReturnParamCode, $docBeforeReturnOffset, 'symfony\\component\\config\\definition\\builder\\arraynodedefinition') === false,
+    'Closure fallback rejects docblock immediately preceding return keyword',
 );
 
 $parseIntMethod = new ReflectionMethod(\AlfredBez\MagoSymfony\Analyzer\Providers\ConsoleCommandDefinition::class, 'parseIntegerLiteral');

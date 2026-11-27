@@ -19,5 +19,7 @@ final class ContainerCaseFallbackNegative
     {
         $psr->get('datetimeimmutable')->getTimestamp();
         $psr->get('symfonyfixturecase\\appservice')->run();
+        $psr->get('\\SymfonyFixtureCase\\AppService')->run();
+        $psr->get('\\DateTimeImmutable')->getTimestamp();
     }
 }

@@ -141,11 +141,13 @@ final class ConsoleCommandDefinition
         }
 
         $calls = [];
-        foreach ($source->getDescendants($configure, NodeKind::MethodCall) as $call) {
-            if (self::isInsideNestedScope($source, $configure, $call)) {
-                continue;
+        foreach ([NodeKind::MethodCall, NodeKind::NullSafeMethodCall] as $callKind) {
+            foreach ($source->getDescendants($configure, $callKind) as $call) {
+                if (self::isInsideNestedScope($source, $configure, $call)) {
+                    continue;
+                }
+                $calls[] = $call;
             }
-            $calls[] = $call;
         }
 
         usort(
@@ -156,6 +158,9 @@ final class ConsoleCommandDefinition
         foreach ($calls as $call) {
             $methodName = strtolower(self::calledMethodName($source, $call) ?? '');
             if ($methodName === 'setdefinition') {
+                if (!self::isThisCommandReceiver($source, $call)) {
+                    continue;
+                }
                 if (self::isConditionalInConfigure($source, $configure, $call)) {
                     $scratchArgs = [];
                     $scratchOpts = [];
@@ -180,6 +185,10 @@ final class ConsoleCommandDefinition
                         $complete = false;
                     }
                 }
+                continue;
+            }
+
+            if (!self::isThisCommandReceiver($source, $call)) {
                 continue;
             }
 
@@ -395,8 +404,30 @@ final class ConsoleCommandDefinition
         return false;
     }
 
+    private static function isThisCommandReceiver(SourceFile $source, Node $call): bool
+    {
+        $recv = self::unwrap($source, $source->getChildren($call)[0] ?? null);
+        while ($recv !== null && ($recv->kind === NodeKind::MethodCall || $recv->kind === NodeKind::NullSafeMethodCall)) {
+            $recv = self::unwrap($source, $source->getChildren($recv)[0] ?? null);
+        }
+
+        return $recv !== null && $source->getText($recv) === '$this';
+    }
+
     private static function isConditionalInConfigure(SourceFile $source, Node $configure, Node $node): bool
     {
+        if ($node->kind === NodeKind::NullSafeMethodCall) {
+            return true;
+        }
+
+        $recv = self::unwrap($source, $source->getChildren($node)[0] ?? null);
+        while ($recv !== null && ($recv->kind === NodeKind::MethodCall || $recv->kind === NodeKind::NullSafeMethodCall)) {
+            if ($recv->kind === NodeKind::NullSafeMethodCall) {
+                return true;
+            }
+            $recv = self::unwrap($source, $source->getChildren($recv)[0] ?? null);
+        }
+
         $parent = $source->getParent($node);
         while ($parent !== null && $parent->id !== $configure->id) {
             if (
@@ -409,8 +440,18 @@ final class ConsoleCommandDefinition
                 || $parent->kind === NodeKind::For
                 || $parent->kind === NodeKind::Foreach
                 || $parent->kind === NodeKind::Conditional
+                || $parent->kind === NodeKind::NullSafeMethodCall
             ) {
                 return true;
+            }
+            if ($parent->kind === NodeKind::Binary) {
+                $children = $source->getChildren($parent);
+                if (count($children) === 3) {
+                    $op = strtolower(trim($source->getText($children[1])));
+                    if ($op === '&&' || $op === '||' || $op === 'and' || $op === 'or' || $op === '??') {
+                        return true;
+                    }
+                }
             }
             $parent = $source->getParent($parent);
         }

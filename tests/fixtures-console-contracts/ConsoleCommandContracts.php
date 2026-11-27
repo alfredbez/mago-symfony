@@ -143,3 +143,43 @@ final class ValidShortcutsAndSuggestedValuesCommand extends Command
         return $input->getOption('ok1') !== null ? Command::SUCCESS : Command::FAILURE;
     }
 }
+
+final class NonCommandSetDefinitionReceiverCommand extends Command
+{
+    protected function configure(): void
+    {
+        $this->addArgument('file', Arg::OPTIONAL);
+        $sub = new class {
+            /** @param list<Opt> $defs */
+            public function setDefinition(array $defs): void
+            {
+                unset($defs);
+            }
+        };
+        $sub->setDefinition([new Opt('x', null, Opt::VALUE_NONE)]);
+    }
+
+    protected function execute(InputInterface $input, OutputInterface $output): int
+    {
+        return $input->getArgument('file') !== null ? Command::SUCCESS : Command::FAILURE;
+    }
+}
+
+final class ShortCircuitConditionalSetDefinitionCommand extends Command
+{
+    public function __construct(private readonly bool $override = false)
+    {
+        parent::__construct();
+    }
+
+    protected function configure(): void
+    {
+        $this->addArgument('file', Arg::OPTIONAL);
+        $_ = $this->override && $this->setDefinition([new Arg('other', Arg::OPTIONAL)])->isHidden();
+    }
+
+    protected function execute(InputInterface $input, OutputInterface $output): int
+    {
+        return $input->getArgument('file') !== null ? Command::SUCCESS : Command::FAILURE;
+    }
+}

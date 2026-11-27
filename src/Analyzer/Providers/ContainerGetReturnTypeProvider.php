@@ -148,6 +148,10 @@ final class ContainerGetReturnTypeProvider implements MethodReturnTypeProvider
             return null;
         }
 
+        if (!$context->codebase->classOrInterfaceExists($id)) {
+            return null;
+        }
+
         $classLike = $context->codebase->getClassLike($id);
         if (
             $classLike === null
@@ -156,7 +160,7 @@ final class ContainerGetReturnTypeProvider implements MethodReturnTypeProvider
             return null;
         }
 
-        if (ltrim($id, '\\') !== ltrim($classLike->originalName, '\\')) {
+        if ($id !== $classLike->originalName) {
             return null;
         }
 

@@ -4,7 +4,13 @@ declare(strict_types=1);
 
 namespace SymfonyFixtureLifecycle;
 
+use Symfony\Component\DependencyInjection\Attribute\AutowireDecorated;
 use Symfony\Contracts\Service\Attribute\Required;
+
+enum SampleRequiredEnum: string
+{
+    case Alpha = 'alpha';
+}
 
 final class RequiredPropertyNegative
 {
@@ -33,6 +39,13 @@ final class RequiredPropertyNegative
     #[Required]
     public mixed $bareMixedRequired;
 
+    #[Required]
+    public SampleRequiredEnum $enumRequired;
+
+    #[Required]
+    #[AutowireDecorated]
+    public string $decoratedScalarRequired;
+
     public string $plainPublic;
 
     public function __construct()
@@ -44,7 +57,8 @@ final class RequiredPropertyNegative
         $u = $this->unionRequired;
         $i = $this->intersectionRequired;
         $a = $this->bareArrayRequired;
-        unset($u, $i, $a);
+        $e = $this->enumRequired;
+        unset($u, $i, $a, $e);
         if ($this->bareMixedRequired === null) {
             return $this->plainPublic;
         }
@@ -53,6 +67,7 @@ final class RequiredPropertyNegative
             . $this->protectedRequired
             . $this->readonlyRequired
             . $this->bareScalarRequired
+            . $this->decoratedScalarRequired
             . $this->plainPublic;
     }
 

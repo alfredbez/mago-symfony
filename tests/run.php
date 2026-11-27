@@ -947,7 +947,7 @@ if ($arrayNodeHasTemplates) {
         'tests/fixtures-treebuilder-return/TreeBuilderRootNodeReturnPositive.php' => [],
         'tests/fixtures-treebuilder-return/TreeBuilderRootNodeReturnNegative.php' => [
             'incompatible-return-type' => 1,
-            'invalid-return-statement' => 14,
+            'invalid-return-statement' => 15,
             'less-specific-return-statement' => 1,
             'non-existent-method' => 1,
         ],
@@ -958,7 +958,7 @@ if ($arrayNodeHasTemplates) {
         ],
         'tests/fixtures-treebuilder-return/TreeBuilderRootNodeReturnNegative.php' => [
             'incompatible-return-type' => 1,
-            'less-specific-return-statement' => 15,
+            'less-specific-return-statement' => 16,
             'non-existent-method' => 1,
         ],
     ]);
@@ -977,11 +977,12 @@ if ($arrayNodeHasTemplates) {
             '97:invalid-return-statement',
             '99:invalid-return-statement',
             '101:invalid-return-statement',
-            '109:invalid-return-statement',
-            '114:invalid-return-statement',
-            '123:invalid-return-statement',
-            '127:incompatible-return-type',
-            '129:invalid-return-statement',
+            '110:invalid-return-statement',
+            '117:invalid-return-statement',
+            '122:invalid-return-statement',
+            '131:invalid-return-statement',
+            '135:incompatible-return-type',
+            '137:invalid-return-statement',
         ],
     ]);
 }
@@ -1011,7 +1012,7 @@ $lifecycleWithout = analyze(true, 'tests/mago-lifecycle.toml');
 $failures += assertHistograms('lifecycle with extension', $lifecycleWith, [
     'tests/fixtures-lifecycle/LifecycleAndEntryPoints.php' => [],
     'tests/fixtures-lifecycle/LifecycleAndEntryPointsNegative.php' => [
-        'uninitialized-property' => 11,
+        'uninitialized-property' => 13,
         'unused-method' => 3,
     ],
 ]);
@@ -1023,7 +1024,7 @@ $failures += assertHistograms('lifecycle --no-extensions', $lifecycleWithout, [
         'unused-method' => 4,
     ],
     'tests/fixtures-lifecycle/LifecycleAndEntryPointsNegative.php' => [
-        'uninitialized-property' => 11,
+        'uninitialized-property' => 13,
         'unused-method' => 3,
     ],
 ]);
@@ -1035,6 +1036,8 @@ $failures += assertMessageCount('lifecycle with extension', $lifecycleWith, 'tes
 $failures += assertMessageCount('lifecycle with extension', $lifecycleWith, 'tests/fixtures-lifecycle/LifecycleAndEntryPointsNegative.php', 'uninitialized-property', '$bareScalarRequired', 1);
 $failures += assertMessageCount('lifecycle with extension', $lifecycleWith, 'tests/fixtures-lifecycle/LifecycleAndEntryPointsNegative.php', 'uninitialized-property', '$bareArrayRequired', 1);
 $failures += assertMessageCount('lifecycle with extension', $lifecycleWith, 'tests/fixtures-lifecycle/LifecycleAndEntryPointsNegative.php', 'uninitialized-property', '$bareMixedRequired', 1);
+$failures += assertMessageCount('lifecycle with extension', $lifecycleWith, 'tests/fixtures-lifecycle/LifecycleAndEntryPointsNegative.php', 'uninitialized-property', '$enumRequired', 1);
+$failures += assertMessageCount('lifecycle with extension', $lifecycleWith, 'tests/fixtures-lifecycle/LifecycleAndEntryPointsNegative.php', 'uninitialized-property', '$decoratedScalarRequired', 1);
 $failures += assertMessageCount('lifecycle with extension', $lifecycleWith, 'tests/fixtures-lifecycle/LifecycleAndEntryPointsNegative.php', 'uninitialized-property', '$plainPublic', 1);
 $failures += assertMessageCount('lifecycle with extension', $lifecycleWith, 'tests/fixtures-lifecycle/LifecycleAndEntryPointsNegative.php', 'uninitialized-property', '$fromPrivateRequired', 1);
 $failures += assertMessageCount('lifecycle with extension', $lifecycleWith, 'tests/fixtures-lifecycle/LifecycleAndEntryPointsNegative.php', 'uninitialized-property', '$fromProtectedRequired', 1);
@@ -1079,7 +1082,7 @@ $failures += assertHistograms('container case fallback with extension', $contain
     'tests/fixtures-container-case/ContainerCaseFallback.php' => [],
     'tests/fixtures-container-case/ContainerCaseFallbackNegative.php' => [
         'ambiguous-object-method-access' => 1,
-        'mixed-method-access' => 3,
+        'mixed-method-access' => 5,
         ...($magoAtLeast161 ? [] : ['possible-method-access-on-null' => 1]),
     ],
 ]);
@@ -1093,7 +1096,7 @@ $failures += assertHistograms('container case fallback --no-extensions', $contai
     ],
     'tests/fixtures-container-case/ContainerCaseFallbackNegative.php' => [
         'ambiguous-object-method-access' => 1,
-        'mixed-method-access' => 3,
+        'mixed-method-access' => 5,
         ...($magoAtLeast161 ? [] : ['possible-method-access-on-null' => 1]),
     ],
 ]);
@@ -1103,7 +1106,7 @@ $failures += assertHistograms('container case XML with extension', $containerCas
         'redundant-condition' => 1,
     ],
     'tests/fixtures-container-case/ContainerCaseFallbackNegative.php' => [
-        'mixed-method-access' => 2,
+        'mixed-method-access' => 4,
         'non-existent-method' => 2,
     ],
 ]);

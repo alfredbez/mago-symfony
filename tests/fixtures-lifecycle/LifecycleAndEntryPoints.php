@@ -81,10 +81,15 @@ final class RequiredPropertyService
     #[Required]
     public ?\stdClass $nullableInjected;
 
+    // @mago-ignore analysis:non-existent-class-like
+    #[Required]
+    public \UnloadedVendor\EntityManagerInterface $externalService;
+
     public function readInjected(): string
     {
         $service = $this->injectedService;
-        unset($service);
+        $external = $this->externalService;
+        unset($service, $external);
 
         return $this->nullableInjected !== null && $this->injectedDebug
             ? $this->injectedName
