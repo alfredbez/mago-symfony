@@ -6,6 +6,18 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-11-27
+
+### Fixed
+
+- `ContainerGetReturnTypeProvider` verifies exact case-sensitive `originalName` matching on unmapped class-name service IDs (without trimming leading backslashes), preventing lowercase service IDs such as `'logger'` from matching unrelated global classes.
+- Replaced PHP 8.0-style `$id === '&'` token checks in `TreeBuilderReturnIssueFilter` and `ConsoleCommandArgumentsHook` with `TokenHelper::isAmpersand()` covering PHP 8.1+ ampersand token constants.
+- `TreeBuilderReturnIssueFilter` accepts unparameterized `@return` docblocks, closure and arrow-function return declarations (with per-file token caching), and all eight concrete Symfony `NodeDefinition` root classes while keeping explicit generic mismatches, inherited generic mismatches, wrong concrete node classes, and reference or conditional rebindings reported.
+- `TreeBuilderRootNodeIndex` resolves non-namespaced global `TreeBuilder` symbols while filtering PHP internals.
+- `ConsoleCommandDefinition` and `ConsoleCommandArgumentsHook` resolve class-constant option and argument names, treat safe read-only getters such as `getName()` as complete, report empty or `'0'` option names, dash-only shortcuts, non-empty `suggestedValues` on non-value modes, and `getArgument('')`, replace earlier definitions on `$this->setDefinition()` (supporting `new InputDefinition([...])`, aliased imports, aliased `$this`, and short-circuit operand order), and honor `hasOption()` / `hasArgument()` dominance guards.
+- `RequiredInitializerProvider` and `RequiredPropertyInitializationProvider` require `public` non-static `#[Required]` methods and reject bare scalar, array, mixed, trait, or enum `#[Required]` properties unless an `#[Autowire*]` property attribute is present (while keeping unloaded external class types injectable).
+- Documented `-d memory_limit=512M` worker headroom and Console default-option discovery scope in `README.md`.
+
 ## [1.0.0] - 2026-11-26
 
 First stable release targeting PHP `8.1` through `8.6`, Mago `^1.60.2` (verified on `1.60.2` and `1.61.0`), and Symfony `^6.4 || ^7.0`.
