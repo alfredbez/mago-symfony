@@ -10,6 +10,7 @@ use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\DependencyInjection\Compiler\CompilerPassInterface;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
 use Symfony\Component\DependencyInjection\Extension\ExtensionInterface;
@@ -67,19 +68,34 @@ final class InitializedCommand extends Command
 final class RequiredPropertyService
 {
     #[Required]
+    #[Autowire('%app.name%')]
     public string $injectedName;
+
+    #[Required]
+    #[Autowire('%app.debug%')]
+    public bool $injectedDebug;
+
+    #[Required]
+    public \stdClass $injectedService;
 
     #[Required]
     public ?\stdClass $nullableInjected;
 
     public function readInjected(): string
     {
-        return $this->nullableInjected !== null ? $this->injectedName : $this->injectedName;
+        $service = $this->injectedService;
+        unset($service);
+
+        return $this->nullableInjected !== null && $this->injectedDebug
+            ? $this->injectedName
+            : $this->injectedName;
     }
 }
 
 final class AttributedEntryPoints
 {
+    private \stdClass $wiredService;
+
     #[Route('/ping')]
     private function pingAction(): Response
     {
@@ -104,8 +120,14 @@ final class AttributedEntryPoints
     }
 
     #[Required]
-    private function wireDependency(): void
+    public function wireDependency(\stdClass $service): void
     {
+        $this->wiredService = $service;
+    }
+
+    public function readWired(): \stdClass
+    {
+        return $this->wiredService;
     }
 }
 

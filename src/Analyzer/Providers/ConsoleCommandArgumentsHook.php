@@ -411,13 +411,16 @@ final class ConsoleCommandArgumentsHook implements ClassLikeAnalysisHook
 
             $args = ConsoleCommandDefinition::extractCallArguments($source, $call);
             $argNode = ConsoleCommandDefinition::resolveArgument($args, 0, 'name');
-            $name = $argNode !== null ? ConsoleCommandDefinition::extractLiteralString($source, $argNode) : null;
+            $name = $argNode !== null ? ConsoleCommandDefinition::extractLiteralString($source, $argNode, $context->analysis) : null;
             if ($name === null) {
                 continue;
             }
 
-            if ($called === 'getargument' && $name !== '' && ($definition->arguments !== [] || $checkEmptyArguments) && !isset($definition->arguments[$name])) {
+            if ($called === 'getargument' && ($definition->arguments !== [] || $checkEmptyArguments) && !isset($definition->arguments[$name])) {
                 if ($name === 'command') {
+                    continue;
+                }
+                if ($this->isGuardedByHasCheck($context, $source, $method, $call, $receiver, 'hasargument', $name)) {
                     continue;
                 }
                 $context->report(
@@ -434,6 +437,9 @@ final class ConsoleCommandArgumentsHook implements ClassLikeAnalysisHook
                 && !$definition->hasDeclaredOption($name)
                 && !isset($defaultApplicationOptions[$name])
             ) {
+                if ($this->isGuardedByHasCheck($context, $source, $method, $call, $receiver, 'hasoption', $name)) {
+                    continue;
+                }
                 $context->report(
                     Level::Error,
                     'unknown-console-option',
@@ -444,6 +450,363 @@ final class ConsoleCommandArgumentsHook implements ClassLikeAnalysisHook
                 );
             }
         }
+    }
+
+    private function isGuardedByHasCheck(
+        NodeAnalysisContext $context,
+        SourceFile $source,
+        Node $method,
+        Node $call,
+        Node $receiver,
+        string $guardMethod,
+        string $expectedKey,
+    ): bool {
+        if ($receiver->kind !== NodeKind::DirectVariable) {
+            return false;
+        }
+
+        $varName = $source->getText($receiver);
+        if ($varName === '') {
+            return false;
+        }
+
+        $current = $call;
+        while (true) {
+            $parent = $source->getParent($current);
+            if ($parent === null || $parent->id === $method->id) {
+                break;
+            }
+            if (
+                $parent->kind === NodeKind::Closure
+                || $parent->kind === NodeKind::ArrowFunction
+                || $parent->kind === NodeKind::AnonymousClass
+            ) {
+                break;
+            }
+
+            if ($parent->kind === NodeKind::Binary) {
+                $children = $source->getChildren($parent);
+                if (count($children) === 3 && $children[2]->id === $current->id) {
+                    $op = strtolower(trim($source->getText($children[1])));
+                    if (
+                        ($op === '&&' || $op === 'and')
+                        && $this->conditionAssertsHas($context, $source, $children[0], $varName, $guardMethod, $expectedKey, true)
+                        && !$this->variableReassignedInRange($source, $parent, $varName, $children[0]->span->end, $call->span->start)
+                    ) {
+                        return true;
+                    }
+                }
+            } elseif ($parent->kind === NodeKind::Conditional) {
+                $children = $source->getChildren($parent);
+                if (
+                    count($children) === 3
+                    && $children[1]->id === $current->id
+                    && $this->conditionAssertsHas($context, $source, $children[0], $varName, $guardMethod, $expectedKey, true)
+                    && !$this->variableReassignedInRange($source, $children[1], $varName, $children[0]->span->end, $call->span->start)
+                ) {
+                    return true;
+                }
+            } elseif ($parent->kind === NodeKind::IfStatementBody) {
+                $bodyChildren = $source->getChildren($parent);
+                if (isset($bodyChildren[0]) && $bodyChildren[0]->id === $current->id) {
+                    $ifNode = $this->enclosingIfForBody($source, $parent);
+                    if ($ifNode !== null) {
+                        $cond = $this->firstChildOfKind($source, $ifNode, NodeKind::Expression);
+                        if (
+                            $cond !== null
+                            && $this->conditionAssertsHas($context, $source, $cond, $varName, $guardMethod, $expectedKey, true)
+                            && !$this->variableReassignedInRange($source, $bodyChildren[0], $varName, $cond->span->end, $call->span->start)
+                        ) {
+                            return true;
+                        }
+                    }
+                }
+            } elseif ($parent->kind === NodeKind::IfColonDelimitedBody) {
+                if (
+                    $current->kind !== NodeKind::IfColonDelimitedBodyElseIfClause
+                    && $current->kind !== NodeKind::IfColonDelimitedBodyElseClause
+                ) {
+                    $ifNode = $this->enclosingIfForBody($source, $parent);
+                    if ($ifNode !== null) {
+                        $cond = $this->firstChildOfKind($source, $ifNode, NodeKind::Expression);
+                        if (
+                            $cond !== null
+                            && $this->conditionAssertsHas($context, $source, $cond, $varName, $guardMethod, $expectedKey, true)
+                            && !$this->variableReassignedInRange($source, $parent, $varName, $cond->span->end, $call->span->start)
+                        ) {
+                            return true;
+                        }
+                    }
+                }
+            } elseif (
+                $parent->kind === NodeKind::IfStatementBodyElseIfClause
+                || $parent->kind === NodeKind::IfColonDelimitedBodyElseIfClause
+            ) {
+                $cond = $this->firstChildOfKind($source, $parent, NodeKind::Expression);
+                if ($cond !== null && $cond->id !== $current->id) {
+                    if (
+                        $this->conditionAssertsHas($context, $source, $cond, $varName, $guardMethod, $expectedKey, true)
+                        && !$this->variableReassignedInRange($source, $parent, $varName, $cond->span->end, $call->span->start)
+                    ) {
+                        return true;
+                    }
+                }
+            } elseif ($parent->kind === NodeKind::Block) {
+                if ($this->hasPrecedingEarlyExitGuard($context, $source, $parent, $current, $call, $varName, $guardMethod, $expectedKey)) {
+                    return true;
+                }
+            }
+
+            $current = $parent;
+        }
+
+        return false;
+    }
+
+    private function firstChildOfKind(SourceFile $source, Node $parent, NodeKind $kind): ?Node
+    {
+        foreach ($source->getChildren($parent) as $child) {
+            if ($child->kind === $kind) {
+                return $child;
+            }
+        }
+
+        return null;
+    }
+
+    private function enclosingIfForBody(SourceFile $source, Node $bodyNode): ?Node
+    {
+        $parent = $source->getParent($bodyNode);
+        if ($parent !== null && $parent->kind === NodeKind::IfBody) {
+            $parent = $source->getParent($parent);
+        }
+
+        return ($parent !== null && $parent->kind === NodeKind::If) ? $parent : null;
+    }
+
+    private function hasPrecedingEarlyExitGuard(
+        NodeAnalysisContext $context,
+        SourceFile $source,
+        Node $block,
+        Node $currentStmt,
+        Node $call,
+        string $varName,
+        string $guardMethod,
+        string $expectedKey,
+    ): bool {
+        foreach ($source->getChildren($block) as $sibling) {
+            if ($sibling->id === $currentStmt->id || $sibling->span->start >= $currentStmt->span->start) {
+                break;
+            }
+            $stmt = $sibling->kind === NodeKind::Statement ? ($source->getChildren($sibling)[0] ?? null) : $sibling;
+            if ($stmt === null || $stmt->kind !== NodeKind::If) {
+                continue;
+            }
+            $cond = $this->firstChildOfKind($source, $stmt, NodeKind::Expression);
+            $body = $this->firstChildOfKind($source, $stmt, NodeKind::IfBody);
+            if ($cond === null || $body === null) {
+                continue;
+            }
+            if (
+                $this->ifBodyUnconditionallyExitsWithoutElse($source, $body)
+                && $this->conditionAssertsHas($context, $source, $cond, $varName, $guardMethod, $expectedKey, false)
+                && !$this->variableReassignedInRange($source, $block, $varName, $stmt->span->end, $call->span->start)
+            ) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function ifBodyUnconditionallyExitsWithoutElse(SourceFile $source, Node $ifBody): bool
+    {
+        $inner = $ifBody->kind === NodeKind::IfBody ? ($source->getChildren($ifBody)[0] ?? null) : $ifBody;
+        if ($inner === null) {
+            return false;
+        }
+
+        if ($inner->kind === NodeKind::IfStatementBody) {
+            $children = $source->getChildren($inner);
+            if (count($children) !== 1) {
+                return false;
+            }
+
+            return $this->statementUnconditionallyExits($source, $children[0]);
+        }
+
+        if ($inner->kind === NodeKind::IfColonDelimitedBody) {
+            $stmts = [];
+            foreach ($source->getChildren($inner) as $child) {
+                if (
+                    $child->kind === NodeKind::IfColonDelimitedBodyElseClause
+                    || $child->kind === NodeKind::IfColonDelimitedBodyElseIfClause
+                ) {
+                    return false;
+                }
+                $stmts[] = $child;
+            }
+            $last = $stmts !== [] ? $stmts[count($stmts) - 1] : null;
+
+            return $last !== null && $this->statementUnconditionallyExits($source, $last);
+        }
+
+        return false;
+    }
+
+    private function statementUnconditionallyExits(SourceFile $source, Node $stmt): bool
+    {
+        if ($stmt->kind === NodeKind::Statement) {
+            $stmt = $source->getChildren($stmt)[0] ?? null;
+            if ($stmt === null) {
+                return false;
+            }
+        }
+
+        if ($stmt->kind === NodeKind::Block) {
+            $children = $source->getChildren($stmt);
+            $last = $children !== [] ? $children[count($children) - 1] : null;
+
+            return $last !== null && $this->statementUnconditionallyExits($source, $last);
+        }
+
+        if (
+            $stmt->kind === NodeKind::Return
+            || $stmt->kind === NodeKind::Throw
+            || $stmt->kind === NodeKind::Continue
+            || $stmt->kind === NodeKind::Break
+        ) {
+            return true;
+        }
+
+        if ($stmt->kind === NodeKind::ExpressionStatement) {
+            $expr = ConsoleCommandDefinition::unwrap($source, $source->getChildren($stmt)[0] ?? null);
+
+            return $expr !== null && $expr->kind === NodeKind::Throw;
+        }
+
+        return false;
+    }
+
+    private function conditionAssertsHas(
+        NodeAnalysisContext $context,
+        SourceFile $source,
+        Node $expr,
+        string $varName,
+        string $guardMethod,
+        string $expectedKey,
+        bool $positive,
+    ): bool {
+        $node = ConsoleCommandDefinition::unwrap($source, $expr);
+        if ($node === null) {
+            return false;
+        }
+
+        if ($node->kind === NodeKind::UnaryPrefix) {
+            $children = $source->getChildren($node);
+            if (count($children) === 2 && trim($source->getText($children[0])) === '!') {
+                return $this->conditionAssertsHas($context, $source, $children[1], $varName, $guardMethod, $expectedKey, !$positive);
+            }
+
+            return false;
+        }
+
+        if ($node->kind === NodeKind::Binary) {
+            $children = $source->getChildren($node);
+            if (count($children) !== 3) {
+                return false;
+            }
+            $op = strtolower(trim($source->getText($children[1])));
+            if ($positive && ($op === '&&' || $op === 'and')) {
+                return $this->conditionAssertsHas($context, $source, $children[0], $varName, $guardMethod, $expectedKey, true)
+                    || $this->conditionAssertsHas($context, $source, $children[2], $varName, $guardMethod, $expectedKey, true);
+            }
+            if (!$positive && ($op === '||' || $op === 'or')) {
+                return $this->conditionAssertsHas($context, $source, $children[0], $varName, $guardMethod, $expectedKey, false)
+                    || $this->conditionAssertsHas($context, $source, $children[2], $varName, $guardMethod, $expectedKey, false);
+            }
+            if ($op === '===' || $op === '==' || $op === '!==' || $op === '!=') {
+                $lhsText = strtolower(trim($source->getText($children[0])));
+                $rhsText = strtolower(trim($source->getText($children[2])));
+                $negatedOp = ($op === '!==' || $op === '!=');
+                if ($lhsText === 'true' || $lhsText === 'false') {
+                    $want = ($lhsText === 'true') ? !$negatedOp : $negatedOp;
+
+                    return $this->conditionAssertsHas($context, $source, $children[2], $varName, $guardMethod, $expectedKey, $positive ? $want : !$want);
+                }
+                if ($rhsText === 'true' || $rhsText === 'false') {
+                    $want = ($rhsText === 'true') ? !$negatedOp : $negatedOp;
+
+                    return $this->conditionAssertsHas($context, $source, $children[0], $varName, $guardMethod, $expectedKey, $positive ? $want : !$want);
+                }
+            }
+
+            return false;
+        }
+
+        if (!$positive || $node->kind !== NodeKind::MethodCall) {
+            return false;
+        }
+
+        $called = strtolower(ConsoleCommandDefinition::calledMethodName($source, $node) ?? '');
+        if ($called !== $guardMethod) {
+            return false;
+        }
+
+        $callRecv = ConsoleCommandDefinition::unwrap($source, $source->getChildren($node)[0] ?? null);
+        if ($callRecv === null || $callRecv->kind !== NodeKind::DirectVariable || $source->getText($callRecv) !== $varName) {
+            return false;
+        }
+
+        $args = ConsoleCommandDefinition::extractCallArguments($source, $node);
+        $argNode = ConsoleCommandDefinition::resolveArgument($args, 0, 'name');
+        if ($argNode === null) {
+            return false;
+        }
+
+        return ConsoleCommandDefinition::extractLiteralString($source, $argNode, $context->analysis) === $expectedKey;
+    }
+
+    private function variableReassignedInRange(
+        SourceFile $source,
+        Node $scope,
+        string $varName,
+        int $afterOffset,
+        int $beforeOffset,
+    ): bool {
+        foreach ($source->getDescendants($scope, NodeKind::Assignment) as $assign) {
+            if ($assign->span->start < $afterOffset || $assign->span->start >= $beforeOffset) {
+                continue;
+            }
+            $lhs = $source->getChildren($assign)[0] ?? null;
+            if ($lhs === null) {
+                continue;
+            }
+            $lhsUnwrapped = ConsoleCommandDefinition::unwrap($source, $lhs);
+            if ($lhsUnwrapped !== null && $lhsUnwrapped->kind === NodeKind::DirectVariable && $source->getText($lhsUnwrapped) === $varName) {
+                return true;
+            }
+            foreach ($source->getDescendants($lhs, NodeKind::DirectVariable) as $targetVar) {
+                if ($source->getText($targetVar) === $varName) {
+                    return true;
+                }
+            }
+        }
+
+        foreach ([NodeKind::ForeachTarget, NodeKind::TryCatchClause, NodeKind::Unset] as $killKind) {
+            foreach ($source->getDescendants($scope, $killKind) as $killNode) {
+                if ($killNode->span->start < $afterOffset || $killNode->span->start >= $beforeOffset) {
+                    continue;
+                }
+                foreach ($source->getDescendants($killNode, NodeKind::DirectVariable) as $targetVar) {
+                    if ($source->getText($targetVar) === $varName) {
+                        return true;
+                    }
+                }
+            }
+        }
+
+        return false;
     }
 
     /**

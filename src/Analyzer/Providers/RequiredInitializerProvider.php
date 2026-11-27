@@ -7,6 +7,8 @@ namespace AlfredBez\MagoSymfony\Analyzer\Providers;
 use Mago\Sdk\Analyzer\ClassInitializerProvider;
 use Mago\Sdk\Analyzer\ClassInitializerProviderContext;
 use Mago\Sdk\Analyzer\ClassTarget;
+use Mago\Sdk\Analyzer\Metadata\MethodFields;
+use Mago\Sdk\Analyzer\Type\Visibility;
 
 /**
  * Recognizes Symfony lifecycle initializers (AbstractController::setContainer,
@@ -59,9 +61,12 @@ final class RequiredInitializerProvider implements ClassInitializerProvider
         $requiredMethods = $context->codebase->findMethods(
             class: $className,
             withAnyAttribute: [self::REQUIRED_ATTRIBUTE],
-            fields: 0,
+            fields: MethodFields::METHOD_DETAILS,
         );
         foreach ($requiredMethods as $method) {
+            if ($method->visibility !== Visibility::Public || $method->static === true) {
+                continue;
+            }
             $member = $method->method->member;
             if ($member !== '') {
                 $initializers[] = $member;

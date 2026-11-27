@@ -96,7 +96,6 @@ final class SymfonyPlugin implements Plugin
             'Symfony\\Component\\EventDispatcher\\Attribute\\AsEventListener',
             'Symfony\\Component\\Messenger\\Attribute\\AsMessageHandler',
             'Symfony\\Component\\Validator\\Constraints\\Callback',
-            'Symfony\\Contracts\\Service\\Attribute\\Required',
         ] as $attribute) {
             $registry->registerAttributedEntryPoint($anyClass, $attribute);
         }

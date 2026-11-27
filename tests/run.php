@@ -1011,20 +1011,20 @@ $lifecycleWithout = analyze(true, 'tests/mago-lifecycle.toml');
 $failures += assertHistograms('lifecycle with extension', $lifecycleWith, [
     'tests/fixtures-lifecycle/LifecycleAndEntryPoints.php' => [],
     'tests/fixtures-lifecycle/LifecycleAndEntryPointsNegative.php' => [
-        'uninitialized-property' => 6,
-        'unused-method' => 1,
+        'uninitialized-property' => 11,
+        'unused-method' => 3,
     ],
 ]);
 $failures += assertHistograms('lifecycle --no-extensions', $lifecycleWithout, [
     'tests/fixtures-lifecycle/LifecycleAndEntryPoints.php' => [
         'invalid-return-statement' => $isSymfony7 ? 1 : 0,
-        'missing-constructor' => 2,
+        'missing-constructor' => 3,
         'uninitialized-property' => 1,
-        'unused-method' => 5,
+        'unused-method' => 4,
     ],
     'tests/fixtures-lifecycle/LifecycleAndEntryPointsNegative.php' => [
-        'uninitialized-property' => 6,
-        'unused-method' => 1,
+        'uninitialized-property' => 11,
+        'unused-method' => 3,
     ],
 ]);
 $failures += assertMessageCount('lifecycle with extension', $lifecycleWith, 'tests/fixtures-lifecycle/LifecycleAndEntryPointsNegative.php', 'uninitialized-property', '$privateRequired', 1);
@@ -1032,8 +1032,42 @@ $failures += assertMessageCount('lifecycle with extension', $lifecycleWith, 'tes
 $failures += assertMessageCount('lifecycle with extension', $lifecycleWith, 'tests/fixtures-lifecycle/LifecycleAndEntryPointsNegative.php', 'uninitialized-property', '$readonlyRequired', 1);
 $failures += assertMessageCount('lifecycle with extension', $lifecycleWith, 'tests/fixtures-lifecycle/LifecycleAndEntryPointsNegative.php', 'uninitialized-property', '$unionRequired', 1);
 $failures += assertMessageCount('lifecycle with extension', $lifecycleWith, 'tests/fixtures-lifecycle/LifecycleAndEntryPointsNegative.php', 'uninitialized-property', '$intersectionRequired', 1);
+$failures += assertMessageCount('lifecycle with extension', $lifecycleWith, 'tests/fixtures-lifecycle/LifecycleAndEntryPointsNegative.php', 'uninitialized-property', '$bareScalarRequired', 1);
+$failures += assertMessageCount('lifecycle with extension', $lifecycleWith, 'tests/fixtures-lifecycle/LifecycleAndEntryPointsNegative.php', 'uninitialized-property', '$bareArrayRequired', 1);
+$failures += assertMessageCount('lifecycle with extension', $lifecycleWith, 'tests/fixtures-lifecycle/LifecycleAndEntryPointsNegative.php', 'uninitialized-property', '$bareMixedRequired', 1);
 $failures += assertMessageCount('lifecycle with extension', $lifecycleWith, 'tests/fixtures-lifecycle/LifecycleAndEntryPointsNegative.php', 'uninitialized-property', '$plainPublic', 1);
+$failures += assertMessageCount('lifecycle with extension', $lifecycleWith, 'tests/fixtures-lifecycle/LifecycleAndEntryPointsNegative.php', 'uninitialized-property', '$fromPrivateRequired', 1);
+$failures += assertMessageCount('lifecycle with extension', $lifecycleWith, 'tests/fixtures-lifecycle/LifecycleAndEntryPointsNegative.php', 'uninitialized-property', '$fromProtectedRequired', 1);
 $failures += assertMessageCount('lifecycle with extension', $lifecycleWith, 'tests/fixtures-lifecycle/LifecycleAndEntryPointsNegative.php', 'unused-method', 'genuinelyUnusedHelper', 1);
+$failures += assertMessageCount('lifecycle with extension', $lifecycleWith, 'tests/fixtures-lifecycle/LifecycleAndEntryPointsNegative.php', 'unused-method', 'initPrivateRequired', 1);
+$failures += assertMessageCount('lifecycle with extension', $lifecycleWith, 'tests/fixtures-lifecycle/LifecycleAndEntryPointsNegative.php', 'unused-method', 'initProtectedRequired', 1);
+
+$consoleContractsWith = analyze(false, 'tests/mago-console-contracts.toml');
+$consoleContractsWithout = analyze(true, 'tests/mago-console-contracts.toml');
+$failures += assertHistograms('console contracts with extension', $consoleContractsWith, [
+    'tests/fixtures-console-contracts/ConsoleCommandContracts.php' => [],
+    'tests/fixtures-console-contracts/ConsoleCommandContractsNegative.php' => [
+        'alfredbez/symfony/invalid-console-input-definition' => 13,
+        'alfredbez/symfony/unknown-console-argument' => 3,
+        'alfredbez/symfony/unknown-console-option' => 11,
+    ],
+]);
+$failures += assertHistograms('console contracts --no-extensions', $consoleContractsWithout, [
+    'tests/fixtures-console-contracts/ConsoleCommandContracts.php' => [],
+    'tests/fixtures-console-contracts/ConsoleCommandContractsNegative.php' => [],
+]);
+$failures += assertMessageCount('console contracts with extension', $consoleContractsWith, 'tests/fixtures-console-contracts/ConsoleCommandContractsNegative.php', 'alfredbez/symfony/invalid-console-input-definition', '`bad-flag`', 1);
+$failures += assertMessageCount('console contracts with extension', $consoleContractsWith, 'tests/fixtures-console-contracts/ConsoleCommandContractsNegative.php', 'alfredbez/symfony/invalid-console-input-definition', 'cannot be empty or `0`', 5);
+$failures += assertMessageCount('console contracts with extension', $consoleContractsWith, 'tests/fixtures-console-contracts/ConsoleCommandContractsNegative.php', 'alfredbez/symfony/invalid-console-input-definition', 'empty or dash-only shortcut', 4);
+$failures += assertMessageCount('console contracts with extension', $consoleContractsWith, 'tests/fixtures-console-contracts/ConsoleCommandContractsNegative.php', 'alfredbez/symfony/invalid-console-input-definition', 'cannot declare suggested values', 3);
+$failures += assertMessageCount('console contracts with extension', $consoleContractsWith, 'tests/fixtures-console-contracts/ConsoleCommandContractsNegative.php', 'alfredbez/symfony/unknown-console-argument', '`missing_user`', 1);
+$failures += assertMessageCount('console contracts with extension', $consoleContractsWith, 'tests/fixtures-console-contracts/ConsoleCommandContractsNegative.php', 'alfredbez/symfony/unknown-console-argument', '``', 1);
+$failures += assertMessageCount('console contracts with extension', $consoleContractsWith, 'tests/fixtures-console-contracts/ConsoleCommandContractsNegative.php', 'alfredbez/symfony/unknown-console-argument', '`replaced_arg`', 1);
+$failures += assertMessageCount('console contracts with extension', $consoleContractsWith, 'tests/fixtures-console-contracts/ConsoleCommandContractsNegative.php', 'alfredbez/symfony/unknown-console-option', '`missing-flag`', 1);
+$failures += assertMessageCount('console contracts with extension', $consoleContractsWith, 'tests/fixtures-console-contracts/ConsoleCommandContractsNegative.php', 'alfredbez/symfony/unknown-console-option', '`missing_after_getname`', 1);
+$failures += assertMessageCount('console contracts with extension', $consoleContractsWith, 'tests/fixtures-console-contracts/ConsoleCommandContractsNegative.php', 'alfredbez/symfony/unknown-console-option', '`replaced_opt`', 1);
+$failures += assertMessageCount('console contracts with extension', $consoleContractsWith, 'tests/fixtures-console-contracts/ConsoleCommandContractsNegative.php', 'alfredbez/symfony/unknown-console-option', '`b`', 1);
+$failures += assertMessageCount('console contracts with extension', $consoleContractsWith, 'tests/fixtures-console-contracts/ConsoleCommandContractsNegative.php', 'alfredbez/symfony/unknown-console-option', '`a`', 7);
 
 $containerCaseWith = analyze(false, 'tests/mago-container-case.toml');
 $containerCaseWithout = analyze(true, 'tests/mago-container-case.toml');

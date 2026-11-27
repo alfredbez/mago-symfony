@@ -40,7 +40,18 @@ final class ConsoleCommandDefinition
         'addusage' => true,
         'setprocesstitle' => true,
         'setcode' => true,
+        'getname' => true,
+        'getdescription' => true,
+        'gethelp' => true,
+        'getprocessedhelp' => true,
+        'getaliases' => true,
+        'getusages' => true,
+        'ishidden' => true,
     ];
+
+    private const LOWER_INPUT_ARGUMENT = 'symfony\\component\\console\\input\\inputargument';
+    private const LOWER_INPUT_OPTION = 'symfony\\component\\console\\input\\inputoption';
+    private const LOWER_INPUT_DEFINITION = 'symfony\\component\\console\\input\\inputdefinition';
 
     private const ARGUMENT_MODES = [
         'required' => self::ARG_REQUIRED,
@@ -120,6 +131,7 @@ final class ConsoleCommandDefinition
         $options = [];
         $errors = [];
         $complete = true;
+        $hasAnyDefinition = false;
 
         foreach ($source->getDescendants($configure, NodeKind::StaticMethodCall) as $staticCall) {
             if (str_contains(strtolower($source->getText($staticCall)), 'parent::configure')) {
@@ -128,9 +140,33 @@ final class ConsoleCommandDefinition
             }
         }
 
+        $calls = [];
         foreach ($source->getDescendants($configure, NodeKind::MethodCall) as $call) {
+            if (self::isInsideNestedScope($source, $configure, $call)) {
+                continue;
+            }
+            $calls[] = $call;
+        }
+
+        usort(
+            $calls,
+            static fn (Node $a, Node $b): int => self::calledMethodSpanStart($source, $a) <=> self::calledMethodSpanStart($source, $b),
+        );
+
+        foreach ($calls as $call) {
             $methodName = strtolower(self::calledMethodName($source, $call) ?? '');
             if ($methodName === 'setdefinition') {
+                if (self::isConditionalInConfigure($source, $configure, $call)) {
+                    $scratchArgs = [];
+                    $scratchOpts = [];
+                    self::extractSetDefinitionInputs($source, $call, $scratchArgs, $scratchOpts, $errors, $analysis);
+                    $complete = false;
+                    continue;
+                }
+
+                $arguments = [];
+                $options = [];
+                $hasAnyDefinition = true;
                 if (!self::extractSetDefinitionInputs($source, $call, $arguments, $options, $errors, $analysis)) {
                     $complete = false;
                 }
@@ -149,35 +185,50 @@ final class ConsoleCommandDefinition
 
             $args = self::extractCallArguments($source, $call);
             $nameNode = self::resolveArgument($args, 0, 'name');
-            $literal = $nameNode !== null ? self::extractLiteralString($source, $nameNode) : null;
-            if ($literal === null || $literal === '') {
+            $literal = $nameNode !== null ? self::extractLiteralString($source, $nameNode, $analysis) : null;
+            if ($literal === null) {
                 $complete = false;
                 continue;
             }
 
             if ($methodName === 'addargument') {
+                if ($literal === '') {
+                    $complete = false;
+                    continue;
+                }
                 $modeNode = self::resolveArgument($args, 1, 'mode');
                 $defaultNode = self::resolveArgument($args, 3, 'default');
-                $mode = $modeNode === null ? self::ARG_OPTIONAL : self::parseMode($source, $modeNode, $analysis, 'symfony\\component\\console\\input\\inputargument', self::ARGUMENT_MODES, self::ARG_OPTIONAL);
+                $mode = $modeNode === null ? self::ARG_OPTIONAL : self::parseMode($source, $modeNode, $analysis, self::LOWER_INPUT_ARGUMENT, self::ARGUMENT_MODES, self::ARG_OPTIONAL);
                 $defaultKind = self::classifyDefault($source, $defaultNode);
                 $arguments[$literal] = ['mode' => $mode, 'defaultKind' => $defaultKind];
+                $hasAnyDefinition = true;
                 self::validateArgumentDefinition($literal, $mode, $defaultKind, $call->span, $errors);
             } else {
                 $normalizedOption = self::normalizeOptionName($literal);
                 if ($normalizedOption === null) {
-                    $complete = false;
+                    $errors[] = [
+                        'span' => $call->span,
+                        'message' => "Console option name `{$literal}` cannot be empty or `0`.",
+                    ];
+                    $hasAnyDefinition = true;
                     continue;
                 }
+                $shortcutNode = self::resolveArgument($args, 1, 'shortcut');
                 $modeNode = self::resolveArgument($args, 2, 'mode');
                 $defaultNode = self::resolveArgument($args, 4, 'default');
-                $mode = $modeNode === null ? self::OPT_VALUE_NONE : self::parseMode($source, $modeNode, $analysis, 'symfony\\component\\console\\input\\inputoption', self::OPTION_MODES, self::OPT_VALUE_NONE);
+                $suggestedNode = self::resolveArgument($args, 5, 'suggestedValues');
+                $mode = $modeNode === null ? self::OPT_VALUE_NONE : self::parseMode($source, $modeNode, $analysis, self::LOWER_INPUT_OPTION, self::OPTION_MODES, self::OPT_VALUE_NONE);
                 $defaultKind = self::classifyDefault($source, $defaultNode);
+                $hasSuggested = self::hasNonEmptySuggestedValues($source, $suggestedNode);
                 $options[$normalizedOption] = ['mode' => $mode, 'defaultKind' => $defaultKind];
-                self::validateOptionDefinition($normalizedOption, $mode, $defaultKind, $call->span, $errors);
+                $hasAnyDefinition = true;
+                if (self::validateOptionShortcut($source, $shortcutNode, $analysis, $normalizedOption, $call->span, $errors)) {
+                    self::validateOptionDefinition($normalizedOption, $mode, $defaultKind, $hasSuggested, $call->span, $errors);
+                }
             }
         }
 
-        if ($arguments === [] && $options === []) {
+        if (!$hasAnyDefinition) {
             $complete = false;
         }
 
@@ -200,11 +251,29 @@ final class ConsoleCommandDefinition
         $args = self::extractCallArguments($source, $call);
         $defArg = self::resolveArgument($args, 0, 'definition');
         $defNode = self::unwrap($source, $defArg);
-        if ($defNode === null || ($defNode->kind !== NodeKind::Array && $defNode->kind !== NodeKind::LegacyArray)) {
+        if ($defNode === null) {
             return false;
         }
 
-        $foundAny = false;
+        if ($defNode->kind === NodeKind::Instantiation) {
+            if (self::resolveInstantiationClassLower($source, $defNode, $analysis) !== self::LOWER_INPUT_DEFINITION) {
+                return false;
+            }
+            $defInstArgs = self::extractCallArguments($source, $defNode);
+            $innerDefArg = self::resolveArgument($defInstArgs, 0, 'definition');
+            if ($innerDefArg === null) {
+                return true;
+            }
+            $defNode = self::unwrap($source, $innerDefArg);
+            if ($defNode === null) {
+                return false;
+            }
+        }
+
+        if ($defNode->kind !== NodeKind::Array && $defNode->kind !== NodeKind::LegacyArray) {
+            return false;
+        }
+
         $allStatic = true;
         foreach ($source->getChildren($defNode) as $element) {
             if ($element->kind !== NodeKind::ArrayElement) {
@@ -223,9 +292,9 @@ final class ConsoleCommandDefinition
                 continue;
             }
 
-            $classText = strtolower($source->getText($inst));
-            $isArg = str_contains($classText, 'inputargument');
-            $isOpt = !$isArg && str_contains($classText, 'inputoption');
+            $instClass = self::resolveInstantiationClassLower($source, $inst, $analysis);
+            $isArg = $instClass === self::LOWER_INPUT_ARGUMENT;
+            $isOpt = $instClass === self::LOWER_INPUT_OPTION;
             if (!$isArg && !$isOpt) {
                 $allStatic = false;
                 continue;
@@ -233,36 +302,238 @@ final class ConsoleCommandDefinition
 
             $instArgs = self::extractCallArguments($source, $inst);
             $nameNode = self::resolveArgument($instArgs, 0, 'name');
-            $literal = $nameNode !== null ? self::extractLiteralString($source, $nameNode) : null;
-            if ($literal === null || $literal === '') {
+            $literal = $nameNode !== null ? self::extractLiteralString($source, $nameNode, $analysis) : null;
+            if ($literal === null) {
                 $allStatic = false;
                 continue;
             }
 
             if ($isArg) {
+                if ($literal === '') {
+                    $allStatic = false;
+                    continue;
+                }
                 $modeNode = self::resolveArgument($instArgs, 1, 'mode');
                 $defaultNode = self::resolveArgument($instArgs, 3, 'default');
-                $mode = $modeNode === null ? self::ARG_OPTIONAL : self::parseMode($source, $modeNode, $analysis, 'symfony\\component\\console\\input\\inputargument', self::ARGUMENT_MODES, self::ARG_OPTIONAL);
+                $mode = $modeNode === null ? self::ARG_OPTIONAL : self::parseMode($source, $modeNode, $analysis, self::LOWER_INPUT_ARGUMENT, self::ARGUMENT_MODES, self::ARG_OPTIONAL);
                 $defaultKind = self::classifyDefault($source, $defaultNode);
                 $arguments[$literal] = ['mode' => $mode, 'defaultKind' => $defaultKind];
                 self::validateArgumentDefinition($literal, $mode, $defaultKind, $inst->span, $errors);
             } else {
                 $normalized = self::normalizeOptionName($literal);
                 if ($normalized === null) {
-                    $allStatic = false;
+                    $errors[] = [
+                        'span' => $inst->span,
+                        'message' => "Console option name `{$literal}` cannot be empty or `0`.",
+                    ];
                     continue;
                 }
+                $shortcutNode = self::resolveArgument($instArgs, 1, 'shortcut');
                 $modeNode = self::resolveArgument($instArgs, 2, 'mode');
                 $defaultNode = self::resolveArgument($instArgs, 4, 'default');
-                $mode = $modeNode === null ? self::OPT_VALUE_NONE : self::parseMode($source, $modeNode, $analysis, 'symfony\\component\\console\\input\\inputoption', self::OPTION_MODES, self::OPT_VALUE_NONE);
+                $suggestedNode = self::resolveArgument($instArgs, 5, 'suggestedValues');
+                $mode = $modeNode === null ? self::OPT_VALUE_NONE : self::parseMode($source, $modeNode, $analysis, self::LOWER_INPUT_OPTION, self::OPTION_MODES, self::OPT_VALUE_NONE);
                 $defaultKind = self::classifyDefault($source, $defaultNode);
+                $hasSuggested = self::hasNonEmptySuggestedValues($source, $suggestedNode);
                 $options[$normalized] = ['mode' => $mode, 'defaultKind' => $defaultKind];
-                self::validateOptionDefinition($normalized, $mode, $defaultKind, $inst->span, $errors);
+                if (self::validateOptionShortcut($source, $shortcutNode, $analysis, $normalized, $inst->span, $errors)) {
+                    self::validateOptionDefinition($normalized, $mode, $defaultKind, $hasSuggested, $inst->span, $errors);
+                }
             }
-            $foundAny = true;
         }
 
-        return $foundAny && $allStatic;
+        return $allStatic;
+    }
+
+    private static function resolveInstantiationClassLower(
+        SourceFile $source,
+        Node $inst,
+        ?FileAnalysis $analysis,
+    ): ?string {
+        $classNode = self::unwrap($source, $source->getChildren($inst)[0] ?? null);
+        if ($classNode !== null) {
+            $resolved = $source->getResolvedName($classNode)?->name;
+            if ($resolved !== null && $resolved !== '') {
+                return strtolower(ltrim($resolved, '\\'));
+            }
+        }
+
+        if ($analysis !== null) {
+            $type = $analysis->getExpressionType($inst);
+            if ($type !== null && count($type->atomicTypes) === 1) {
+                $atomic = $type->atomicTypes[0];
+                if (property_exists($atomic, 'name') && is_string($atomic->name) && $atomic->name !== '') {
+                    return strtolower(ltrim($atomic->name, '\\'));
+                }
+            }
+        }
+
+        if ($classNode !== null) {
+            $text = strtolower(ltrim(trim($source->getText($classNode)), '\\'));
+            if ($text !== '') {
+                return $text;
+            }
+        }
+
+        return null;
+    }
+
+    private static function isInsideNestedScope(SourceFile $source, Node $configure, Node $node): bool
+    {
+        $parent = $source->getParent($node);
+        while ($parent !== null && $parent->id !== $configure->id) {
+            if (
+                $parent->kind === NodeKind::Closure
+                || $parent->kind === NodeKind::ArrowFunction
+                || $parent->kind === NodeKind::AnonymousClass
+            ) {
+                return true;
+            }
+            $parent = $source->getParent($parent);
+        }
+
+        return false;
+    }
+
+    private static function isConditionalInConfigure(SourceFile $source, Node $configure, Node $node): bool
+    {
+        $parent = $source->getParent($node);
+        while ($parent !== null && $parent->id !== $configure->id) {
+            if (
+                $parent->kind === NodeKind::If
+                || $parent->kind === NodeKind::Switch
+                || $parent->kind === NodeKind::Match
+                || $parent->kind === NodeKind::Try
+                || $parent->kind === NodeKind::While
+                || $parent->kind === NodeKind::DoWhile
+                || $parent->kind === NodeKind::For
+                || $parent->kind === NodeKind::Foreach
+                || $parent->kind === NodeKind::Conditional
+            ) {
+                return true;
+            }
+            $parent = $source->getParent($parent);
+        }
+
+        return false;
+    }
+
+    private static function calledMethodSpanStart(SourceFile $source, Node $call): int
+    {
+        $children = $source->getChildren($call);
+        $member = $children[1] ?? null;
+
+        return $member !== null ? $member->span->start : $call->span->start;
+    }
+
+    /**
+     * Mirrors Symfony InputOption::__construct() shortcut normalization.
+     *
+     * @param list<array{span: Span, message: string}> $errors
+     */
+    private static function validateOptionShortcut(
+        SourceFile $source,
+        ?Node $shortcutNode,
+        ?FileAnalysis $analysis,
+        string $optionName,
+        Span $span,
+        array &$errors,
+    ): bool {
+        if ($shortcutNode === null) {
+            return true;
+        }
+
+        $unwrapped = self::unwrap($source, $shortcutNode);
+        if ($unwrapped === null) {
+            return true;
+        }
+
+        $shortcutString = self::extractLiteralString($source, $shortcutNode, $analysis);
+        if ($shortcutString !== null) {
+            if ($shortcutString === '') {
+                return true;
+            }
+            if (self::isEmptyNormalizedShortcut($shortcutString)) {
+                $errors[] = [
+                    'span' => $span,
+                    'message' => "Console option `{$optionName}` declares an empty or dash-only shortcut.",
+                ];
+
+                return false;
+            }
+
+            return true;
+        }
+
+        if ($unwrapped->kind === NodeKind::Array || $unwrapped->kind === NodeKind::LegacyArray) {
+            $items = [];
+            foreach ($source->getChildren($unwrapped) as $element) {
+                if ($element->kind !== NodeKind::ArrayElement) {
+                    continue;
+                }
+                $variant = $source->getChildren($element)[0] ?? null;
+                if ($variant === null || $variant->kind !== NodeKind::ValueArrayElement) {
+                    return true;
+                }
+                $valNode = $source->getChildren($variant)[0] ?? null;
+                $val = $valNode !== null ? self::extractLiteralString($source, $valNode, $analysis) : null;
+                if ($val === null) {
+                    return true;
+                }
+                $items[] = $val;
+            }
+
+            if ($items === []) {
+                return true;
+            }
+
+            if (self::isEmptyNormalizedShortcut(implode('|', $items))) {
+                $errors[] = [
+                    'span' => $span,
+                    'message' => "Console option `{$optionName}` declares an empty or dash-only shortcut.",
+                ];
+
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static function isEmptyNormalizedShortcut(string $shortcut): bool
+    {
+        $parts = preg_split('{(\|)-?}', ltrim($shortcut, '-'));
+        if (!is_array($parts)) {
+            return false;
+        }
+
+        return implode('|', array_filter($parts, 'strlen')) === '';
+    }
+
+    private static function hasNonEmptySuggestedValues(SourceFile $source, ?Node $suggestedNode): bool
+    {
+        if ($suggestedNode === null) {
+            return false;
+        }
+
+        $unwrapped = self::unwrap($source, $suggestedNode);
+        if ($unwrapped === null) {
+            return false;
+        }
+
+        if ($unwrapped->kind === NodeKind::Closure || $unwrapped->kind === NodeKind::ArrowFunction) {
+            return true;
+        }
+
+        if ($unwrapped->kind === NodeKind::Array || $unwrapped->kind === NodeKind::LegacyArray) {
+            foreach ($source->getChildren($unwrapped) as $element) {
+                if ($element->kind === NodeKind::ArrayElement) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     /**
@@ -313,6 +584,7 @@ final class ConsoleCommandDefinition
         string $name,
         ?int $mode,
         string $defaultKind,
+        bool $hasSuggestedValues,
         Span $span,
         array &$errors,
     ): void {
@@ -333,6 +605,14 @@ final class ConsoleCommandDefinition
         $isNone = ($mode & self::OPT_VALUE_NONE) === self::OPT_VALUE_NONE;
         $isArray = ($mode & self::OPT_VALUE_IS_ARRAY) === self::OPT_VALUE_IS_ARRAY;
         $isNegatable = ($mode & self::OPT_VALUE_NEGATABLE) === self::OPT_VALUE_NEGATABLE;
+
+        if ($hasSuggestedValues && !$acceptsValue) {
+            $errors[] = [
+                'span' => $span,
+                'message' => "Console option `{$name}` does not accept a value and cannot declare suggested values.",
+            ];
+            return;
+        }
 
         if ($isArray && !$acceptsValue) {
             $errors[] = [
@@ -567,8 +847,24 @@ final class ConsoleCommandDefinition
         return $source->getText($selector);
     }
 
-    public static function extractLiteralString(SourceFile $source, Node $node): ?string
+    public static function extractLiteralString(SourceFile $source, Node $node, ?FileAnalysis $analysis = null): ?string
     {
+        if ($analysis !== null) {
+            $exprType = $analysis->getExpressionType($node);
+            if ($exprType === null) {
+                $unwrapped = self::unwrap($source, $node);
+                if ($unwrapped !== null) {
+                    $exprType = $analysis->getExpressionType($unwrapped);
+                }
+            }
+            if ($exprType !== null) {
+                $literal = $exprType->getLiteralString();
+                if ($literal !== null) {
+                    return $literal;
+                }
+            }
+        }
+
         $node = self::unwrap($source, $node);
         if ($node === null) {
             return null;

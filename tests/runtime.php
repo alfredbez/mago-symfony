@@ -687,4 +687,114 @@ check($parseIntMethod->invoke(null, '0o10') === 8, 'PHP 8.1 octal literal 0o10 p
 check($parseIntMethod->invoke(null, '0O40') === 32, 'PHP 8.1 octal literal 0O40 parses as 32');
 check($parseIntMethod->invoke(null, '08') === null, 'Invalid legacy octal literal 08 returns null');
 
+foreach (['', '--', '0', '--0'] as $invalidOptName) {
+    try {
+        new \Symfony\Component\Console\Input\InputOption($invalidOptName);
+        throw new RuntimeException("Invalid option name {$invalidOptName} must throw at runtime");
+    } catch (\Symfony\Component\Console\Exception\InvalidArgumentException) {
+    }
+}
+
+foreach (['-', '--', '-|-', ['-']] as $idx => $invalidShortcut) {
+    try {
+        new \Symfony\Component\Console\Input\InputOption('ok', $invalidShortcut);
+        throw new RuntimeException("Invalid shortcut #{$idx} must throw at runtime");
+    } catch (\Symfony\Component\Console\Exception\InvalidArgumentException) {
+    }
+}
+check((new \Symfony\Component\Console\Input\InputOption('ok', ''))->getShortcut() === null, 'Empty string shortcut normalizes to null');
+check((new \Symfony\Component\Console\Input\InputOption('ok', []))->getShortcut() === null, 'Empty array shortcut normalizes to null');
+
+foreach ([
+    static fn () => new \Symfony\Component\Console\Input\InputOption('ok', null, \Symfony\Component\Console\Input\InputOption::VALUE_NONE, '', null, ['a']),
+    static fn () => new \Symfony\Component\Console\Input\InputOption('ok', null, \Symfony\Component\Console\Input\InputOption::VALUE_NONE, '', null, static fn (): array => ['a']),
+    static fn () => new \Symfony\Component\Console\Input\InputOption('ok', null, \Symfony\Component\Console\Input\InputOption::VALUE_NEGATABLE, '', null, ['a']),
+] as $idx => $invalidSuggestedFactory) {
+    try {
+        $invalidSuggestedFactory();
+        throw new RuntimeException("Invalid suggestedValues #{$idx} must throw LogicException at runtime");
+    } catch (\Symfony\Component\Console\Exception\LogicException) {
+    }
+}
+check((new \Symfony\Component\Console\Input\InputOption('ok', null, \Symfony\Component\Console\Input\InputOption::VALUE_NONE, '', null, []))->getName() === 'ok', 'Empty suggestedValues is valid with VALUE_NONE');
+check((new \Symfony\Component\Console\Input\InputOption('ok', null, \Symfony\Component\Console\Input\InputOption::VALUE_REQUIRED, '', null, ['a']))->getName() === 'ok', 'Non-empty suggestedValues is valid with VALUE_REQUIRED');
+
+try {
+    (new \Symfony\Component\Console\Input\ArrayInput([], new \Symfony\Component\Console\Input\InputDefinition([new \Symfony\Component\Console\Input\InputArgument('known')])))->getArgument('');
+    throw new RuntimeException('Empty getArgument("") must throw at runtime');
+} catch (\Symfony\Component\Console\Exception\InvalidArgumentException) {
+}
+
+$replaceDefCmd = new class extends \Symfony\Component\Console\Command\Command {
+    protected function configure(): void
+    {
+        $this
+            ->addArgument('replaced_arg', \Symfony\Component\Console\Input\InputArgument::OPTIONAL)
+            ->addOption('replaced_opt', null, \Symfony\Component\Console\Input\InputOption::VALUE_NONE)
+            ->setDefinition(new \Symfony\Component\Console\Input\InputDefinition([
+                new \Symfony\Component\Console\Input\InputArgument('kept_arg', \Symfony\Component\Console\Input\InputArgument::OPTIONAL),
+                new \Symfony\Component\Console\Input\InputOption('kept_opt', null, \Symfony\Component\Console\Input\InputOption::VALUE_NONE),
+            ]));
+    }
+};
+check(
+    !$replaceDefCmd->getDefinition()->hasArgument('replaced_arg')
+    && !$replaceDefCmd->getDefinition()->hasOption('replaced_opt')
+    && $replaceDefCmd->getDefinition()->hasArgument('kept_arg')
+    && $replaceDefCmd->getDefinition()->hasOption('kept_opt'),
+    'Command::setDefinition(new InputDefinition(...)) replaces earlier addArgument/addOption definitions',
+);
+
+$validRequiredService = new class {
+    #[\Symfony\Contracts\Service\Attribute\Required]
+    public \stdClass $dep;
+
+    #[\Symfony\Contracts\Service\Attribute\Required]
+    #[\Symfony\Component\DependencyInjection\Attribute\Autowire(value: 'ok')]
+    public string $label;
+
+    public bool $wired = false;
+
+    #[\Symfony\Contracts\Service\Attribute\Required]
+    public function wire(\stdClass $dep): void
+    {
+        $this->dep = $dep;
+        $this->wired = true;
+    }
+};
+$validDiBuilder = new ContainerBuilder();
+$validDiBuilder->register(\stdClass::class, \stdClass::class);
+$validDiBuilder->register('test.valid_required', $validRequiredService::class)->setAutowired(true)->setPublic(true);
+$validDiBuilder->compile();
+$wiredInstance = $validDiBuilder->get('test.valid_required');
+check($wiredInstance instanceof $validRequiredService && $wiredInstance->wired && $wiredInstance->label === 'ok', 'Public #[Required] method, class property, and #[Autowire] scalar property compile cleanly');
+
+$privateRequiredMethodService = new class {
+    #[\Symfony\Contracts\Service\Attribute\Required]
+    private function wire(\stdClass $dep): void
+    {
+        unset($dep);
+    }
+};
+try {
+    $privDiBuilder = new ContainerBuilder();
+    $privDiBuilder->register(\stdClass::class, \stdClass::class);
+    $privDiBuilder->register('test.private_required', $privateRequiredMethodService::class)->setAutowired(true)->setPublic(true);
+    $privDiBuilder->compile();
+    throw new RuntimeException('Private #[Required] method must throw on ContainerBuilder::compile()');
+} catch (\Symfony\Component\DependencyInjection\Exception\RuntimeException) {
+}
+
+$bareScalarRequiredPropService = new class {
+    #[\Symfony\Contracts\Service\Attribute\Required]
+    public string $bare;
+};
+try {
+    $scalarDiBuilder = new ContainerBuilder();
+    $scalarDiBuilder->register('test.bare_scalar_required', $bareScalarRequiredPropService::class)->setAutowired(true)->setPublic(true);
+    $scalarDiBuilder->compile();
+    throw new RuntimeException('Bare scalar #[Required] property without #[Autowire*] must throw on ContainerBuilder::compile()');
+} catch (\Symfony\Component\DependencyInjection\Exception\ServiceNotFoundException) {
+}
+
 fwrite(STDOUT, "Symfony runtime contracts PASS\n\n");

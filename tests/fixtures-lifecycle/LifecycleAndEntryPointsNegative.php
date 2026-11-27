@@ -23,6 +23,16 @@ final class RequiredPropertyNegative
     #[Required]
     public \Iterator&\Countable $intersectionRequired;
 
+    #[Required]
+    public string $bareScalarRequired;
+
+    /** @var array<string, mixed> */
+    #[Required]
+    public array $bareArrayRequired;
+
+    #[Required]
+    public mixed $bareMixedRequired;
+
     public string $plainPublic;
 
     public function __construct()
@@ -33,15 +43,52 @@ final class RequiredPropertyNegative
     {
         $u = $this->unionRequired;
         $i = $this->intersectionRequired;
-        unset($u, $i);
+        $a = $this->bareArrayRequired;
+        unset($u, $i, $a);
+        if ($this->bareMixedRequired === null) {
+            return $this->plainPublic;
+        }
 
         return $this->privateRequired
             . $this->protectedRequired
             . $this->readonlyRequired
+            . $this->bareScalarRequired
             . $this->plainPublic;
     }
 
     private function genuinelyUnusedHelper(): void
     {
+    }
+}
+
+final class NonPublicRequiredMethodNegative
+{
+    private string $fromPrivateRequired;
+    private string $fromProtectedRequired;
+
+    public function __construct()
+    {
+    }
+
+    #[Required]
+    private function initPrivateRequired(): void
+    {
+        $this->fromPrivateRequired = 'private';
+    }
+
+    #[Required]
+    protected function initProtectedRequired(): void
+    {
+        $this->fromProtectedRequired = 'protected';
+    }
+
+    #[Required]
+    public static function initStaticRequired(): void
+    {
+    }
+
+    public function readInitialized(): string
+    {
+        return $this->fromPrivateRequired . $this->fromProtectedRequired;
     }
 }
