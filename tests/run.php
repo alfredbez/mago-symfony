@@ -1083,7 +1083,6 @@ $failures += assertHistograms('container case fallback with extension', $contain
     'tests/fixtures-container-case/ContainerCaseFallbackNegative.php' => [
         'ambiguous-object-method-access' => 1,
         'mixed-method-access' => 5,
-        ...($magoAtLeast161 ? [] : ['possible-method-access-on-null' => 1]),
     ],
 ]);
 $failures += assertHistograms('container case fallback --no-extensions', $containerCaseWithout, [
@@ -1097,7 +1096,6 @@ $failures += assertHistograms('container case fallback --no-extensions', $contai
     'tests/fixtures-container-case/ContainerCaseFallbackNegative.php' => [
         'ambiguous-object-method-access' => 1,
         'mixed-method-access' => 5,
-        ...($magoAtLeast161 ? [] : ['possible-method-access-on-null' => 1]),
     ],
 ]);
 $failures += assertHistograms('container case XML with extension', $containerCaseXml, [

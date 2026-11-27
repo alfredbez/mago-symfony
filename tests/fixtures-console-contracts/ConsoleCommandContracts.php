@@ -183,3 +183,18 @@ final class ShortCircuitConditionalSetDefinitionCommand extends Command
         return $input->getArgument('file') !== null ? Command::SUCCESS : Command::FAILURE;
     }
 }
+
+final class AliasedThisConfigureCommand extends Command
+{
+    protected function configure(): void
+    {
+        $this->addArgument('first', Arg::OPTIONAL);
+        $cmd = $this;
+        $cmd->addArgument('aliased_arg', Arg::OPTIONAL);
+    }
+
+    protected function execute(InputInterface $input, OutputInterface $output): int
+    {
+        return $input->getArgument('aliased_arg') !== null ? Command::SUCCESS : Command::FAILURE;
+    }
+}

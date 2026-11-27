@@ -155,10 +155,15 @@ final class ConsoleCommandDefinition
             static fn (Node $a, Node $b): int => self::calledMethodSpanStart($source, $a) <=> self::calledMethodSpanStart($source, $b),
         );
 
+        $hasThisAlias = self::hasThisAlias($source, $configure);
+
         foreach ($calls as $call) {
             $methodName = strtolower(self::calledMethodName($source, $call) ?? '');
             if ($methodName === 'setdefinition') {
                 if (!self::isThisCommandReceiver($source, $call)) {
+                    if ($hasThisAlias) {
+                        $complete = false;
+                    }
                     continue;
                 }
                 if (self::isConditionalInConfigure($source, $configure, $call)) {
@@ -189,6 +194,9 @@ final class ConsoleCommandDefinition
             }
 
             if (!self::isThisCommandReceiver($source, $call)) {
+                if ($hasThisAlias) {
+                    $complete = false;
+                }
                 continue;
             }
 
@@ -404,6 +412,32 @@ final class ConsoleCommandDefinition
         return false;
     }
 
+    private static function hasThisAlias(SourceFile $source, Node $configure): bool
+    {
+        foreach ($source->getDescendants($configure, NodeKind::Assignment) as $assignment) {
+            if (self::isInsideNestedScope($source, $configure, $assignment)) {
+                continue;
+            }
+            $children = $source->getChildren($assignment);
+            $rhs = $children[count($children) - 1] ?? null;
+            $rhs = self::unwrap($source, $rhs);
+            if ($rhs === null) {
+                continue;
+            }
+            if ($source->getText($rhs) === '$this') {
+                return true;
+            }
+            if (
+                ($rhs->kind === NodeKind::MethodCall || $rhs->kind === NodeKind::NullSafeMethodCall)
+                && self::isThisCommandReceiver($source, $rhs)
+            ) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     private static function isThisCommandReceiver(SourceFile $source, Node $call): bool
     {
         $recv = self::unwrap($source, $source->getChildren($call)[0] ?? null);
@@ -428,6 +462,7 @@ final class ConsoleCommandDefinition
             $recv = self::unwrap($source, $source->getChildren($recv)[0] ?? null);
         }
 
+        $child = $node;
         $parent = $source->getParent($node);
         while ($parent !== null && $parent->id !== $configure->id) {
             if (
@@ -440,19 +475,25 @@ final class ConsoleCommandDefinition
                 || $parent->kind === NodeKind::For
                 || $parent->kind === NodeKind::Foreach
                 || $parent->kind === NodeKind::Conditional
-                || $parent->kind === NodeKind::NullSafeMethodCall
             ) {
                 return true;
             }
+            if ($parent->kind === NodeKind::NullSafeMethodCall) {
+                $children = $source->getChildren($parent);
+                if (!isset($children[0]) || $children[0]->id !== $child->id) {
+                    return true;
+                }
+            }
             if ($parent->kind === NodeKind::Binary) {
                 $children = $source->getChildren($parent);
-                if (count($children) === 3) {
+                if (count($children) === 3 && $children[2]->id === $child->id) {
                     $op = strtolower(trim($source->getText($children[1])));
                     if ($op === '&&' || $op === '||' || $op === 'and' || $op === 'or' || $op === '??') {
                         return true;
                     }
                 }
             }
+            $child = $parent;
             $parent = $source->getParent($parent);
         }
 
